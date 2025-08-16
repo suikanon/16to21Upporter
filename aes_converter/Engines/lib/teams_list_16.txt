@@ -1,0 +1,221 @@
+ID Name
+701 /3/
+702 /a/
+703 /aco/
+704 /adv/
+705 /an/
+706 /asp/
+707 /b/
+708 /bant/
+709 /biz/
+710 /c/
+711 /cgl/
+712 /ck/
+713 /cm/
+714 /co/
+715 /d/
+716 /diy/
+717 /e/
+718 /f/
+719 /fa/
+720 /fit/
+721 /g/
+722 /gd/
+723 /gif/
+724 /h/
+725 /his/
+726 /hm/
+727 /hr/
+728 /i/
+729 /ic/
+730 /int/
+731 /jp/
+732 /k/
+733 /lgbt/
+734 /lit/
+735 /m/
+736 /mlp/
+737 /mu/
+738 /n/
+739 /o/
+740 /out/
+741 /p/
+742 /po/
+743 /pol/
+744 /pw/
+745 /r9k/
+746 /s/
+747 /s4s/
+748 /sci/
+749 /soc/
+750 /sp/
+751 /t/
+752 /tg/
+753 /toy/
+754 /trv/
+755 /tv/
+756 /u/
+757 /v/
+758 /vg/
+759 /vm/
+760 /vmg/
+761 /vp/
+762 /vr/
+763 /vrpg/
+764 /vst/
+765 /vt/
+766 /w/
+767 /wg/
+768 /wsg/
+769 /x/
+770 /xs/
+771 /y/
+772 Backup 1
+773 Backup 2
+774 Backup 3
+775 Backup 4
+776 Backup 5
+777 Backup 6
+778 Backup 7
+779 Backup 8
+780 Backup 9
+781 VGL 1
+782 VGL 2
+783 VGL 3
+784 VGL 4
+785 VGL 5
+786 VGL 6
+787 VGL 7
+788 VGL 8
+789 VGL 9
+790 VGL 10
+791 VGL 11
+792 VGL 12
+793 VGL 13
+794 VGL 14
+795 VGL 15
+796 VGL 16
+797 VGL 17
+798 VGL 18
+799 VGL 19
+800 VGL 20
+801 VGL 21
+802 VGL 22
+803 VGL 23
+804 VGL 24
+805 VGL 25
+806 VGL 26
+807 VGL 27
+808 VGL 28
+809 VGL 29
+810 VGL 30
+811 VGL 31
+812 VGL 32
+813 VGL 33
+814 VGL 34
+815 VGL 35
+816 VGL 36
+817 VGL 37
+818 VGL 38
+819 VGL 39
+820 VGL 40
+821 VGL 41
+822 VGL 42
+823 VGL 43
+824 VGL 44
+825 VGL 45
+826 VGL 46
+827 VGL 47
+828 VGL 48
+829 VGL 49
+830 VGL 50
+831 VGL 51
+832 VGL 52
+833 VGL 53
+834 VGL 54
+835 VGL 55
+836 VGL 56
+837 VGL 57
+838 VGL 58
+839 VGL 59
+840 VGL 60
+841 VGL 61
+842 VGL 62
+843 VGL 63
+844 VGL 64
+845 VGL 65
+846 VGL 66
+847 VGL 67
+848 VGL 68
+849 VGL 69
+850 VGL 70
+851 Invitational 1
+852 Invitational 2
+853 Invitational 3
+854 Invitational 4
+855 Invitational 5
+856 Invitational 6
+857 Invitational 7
+858 Invitational 8
+859 Invitational 9
+860 Invitational 10
+861 Invitational 11
+862 Invitational 12
+863 Invitational 13
+864 Invitational 14
+865 Invitational 15
+866 Invitational 16
+867 Invitational 17
+868 Invitational 18
+869 Invitational 19
+870 Invitational 20
+871 Invitational 21
+872 Invitational 22
+873 Invitational 23
+874 Invitational 24
+875 Invitational 25
+876 Invitational 26
+877 Invitational 27
+878 Invitational 28
+879 Invitational 29
+880 Invitational 30
+881 Invitational 31
+882 Invitational 32
+883 Invitational 33
+884 Invitational 34
+885 Invitational 35
+886 Invitational 36
+887 Invitational 37
+888 Invitational 38
+889 Invitational 39
+890 Invitational 40
+891 Invitational 41
+892 Invitational 42
+893 Invitational 43
+894 Invitational 44
+895 Invitational 45
+896 Invitational 46
+897 Invitational 47
+898 Invitational 48
+899 Invitational 49
+900 Invitational 50
+901 Invitational 51
+902 Invitational 52
+903 Invitational 53
+904 Invitational 54
+905 Invitational 55
+906 Invitational 56
+907 Invitational 57
+908 Invitational 58
+909 Invitational 59
+910 Invitational 60
+911 Invitational 61
+912 Invitational 62
+913 Invitational 63
+914 Invitational 64
+915 Invitational 65
+916 Invitational 66
+917 Invitational 67
+918 Invitational 68
+919 Invitational 69
+920 Invitational 70

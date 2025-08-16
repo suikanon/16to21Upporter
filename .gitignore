@@ -1,0 +1,7 @@
+*.pyc
+*.log
+*.log.old
+/aes_converter/exports_converted
+/aes_converter/exports_to_convert
+/aes_converter/players_converted
+/aes_converter/players_to_convert

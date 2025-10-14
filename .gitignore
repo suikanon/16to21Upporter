@@ -3,5 +3,10 @@
 *.log.old
 /aes_converter/exports_converted
 /aes_converter/exports_to_convert
+/aes_converter/exports_converted21
+/aes_converter/exports_to_convert21
 /aes_converter/players_converted
 /aes_converter/players_to_convert
+.claude/
+.idea/
+CLAUDE.md

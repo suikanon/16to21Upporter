@@ -870,6 +870,8 @@ class FmdlFile:
 			if not techniqueStringID < len(strings):
 				raise InvalidFmdl("Invalid string ID %d referenced by material" % techniqueStringID)
 			materials.append((strings[techniqueStringID], strings[shaderStringID]))
+		print("materials")
+		print(materials)
 		return materials
 	
 	@staticmethod
@@ -1280,6 +1282,7 @@ class FmdlFile:
 		fmdl.readFile(filename)
 		
 		(strings, extensionHeaders) = self.parseStrings(fmdl)
+		print(strings)
 		boundingBoxes = self.parseBoundingBoxes(fmdl)
 		bones = self.parseBones(fmdl, strings, boundingBoxes)
 		materialInstances = self.parseMaterialInstances(fmdl, strings)

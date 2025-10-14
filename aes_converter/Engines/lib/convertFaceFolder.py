@@ -77,7 +77,7 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 		faceFpkFilename = ijoin(directory, "face.fpk.xml")
 		bootsFpkFilename = ijoin(directory, "boots.fpk.xml")
 		gloveFpkFilename = ijoin(directory, "glove.fpk.xml")
-		
+
 		fpkFilenames = [filename for filename in [
 			ijoin(directory, "face.fpk.xml"),
 			ijoin(directory, "boots.fpk.xml"),
@@ -166,6 +166,107 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 		faceDiffBin = open(faceDiffBinFilename, 'rb').read()
 		if not faceDiffFileIsEmpty(faceDiffBin):
 			open(os.path.join(destinationDirectory, "face_diff.bin"), 'wb').write(faceDiffBin)
+
+
+def convertModelFaceFolder(sourceDirectories, destinationDirectory, commonDestinationDirectory):
+	faceDiffBinFilename = None
+	fmdlFiles = []
+
+	for directory in sourceDirectories:
+		faceFpkFilename = ijoin(directory, "face.fpk.xml")
+		bootsFpkFilename = ijoin(directory, "boots.fpk.xml")
+		gloveFpkFilename = ijoin(directory, "glove.fpk.xml")
+
+		fpkFilenames = [filename for filename in [
+			ijoin(directory, "face.fpk.xml"),
+			ijoin(directory, "boots.fpk.xml"),
+			ijoin(directory, "glove.fpk.xml"),
+		] if filename is not None]
+
+		if len(fpkFilenames) == 0:
+			print("WARNING: No .xpk.fml file found in model folder '%s', skipping folder" % (directory))
+			continue
+		if len(fpkFilenames) > 1:
+			print("WARNING: Multiple .xpk.fml file found in model folder '%s', skipping folder" % (directory))
+			continue
+
+		for filename in parseFpkXml(fpkFilenames[0], directory):
+			if filename.lower().endswith("face_diff.bin"):
+				faceDiffBinFilename = filename
+			elif filename.lower().endswith(".fmdl"):
+				fmdlFiles.append(filename)
+			elif filename.lower().endswith("boots.skl"):
+				continue
+			else:
+				print("WARNING: Unknown file '%s' referenced by '%s', skipping" % (filename, fpkFilenames[0]))
+				continue
+
+	fmdls = []
+	for filename in fmdlFiles:
+		containingDirectory = os.path.dirname(filename)
+		fmdlFile = fmdl2model.loadFmdl(filename)
+
+		fmdls.append((filename, containingDirectory, fmdlFile))
+
+	(materialFile, fmdlMeshMaterialNames) = material.buildMaterials(fmdls, destinationDirectory,
+																	commonDestinationDirectory)
+	open(os.path.join(destinationDirectory, 'materials.mtl'), 'wb').write(materialFile)
+
+	for (filename, containingDirectory, fmdlFile) in fmdls:
+		baseName = os.path.basename(filename)[:-5].lower()
+
+		if 'face_high' in baseName:
+			modelType = 'face_neck'
+			modelSubtype = 'face'
+		elif 'hair_high' in baseName:
+			modelType = 'face_neck'
+			modelSubtype = 'hair'
+		elif 'oral' in baseName:
+			modelType = 'face_neck'
+			modelSubtype = 'oral'
+		elif 'boots' in baseName:
+			modelType = 'parts'
+			modelSubtype = 'body'
+		elif 'glove_l' in baseName:
+			baseName = baseName.replace("glove_l", "gloveL")
+			modelType = 'gloveL'
+			modelSubtype = None
+		elif 'glove_r' in baseName:
+			baseName = baseName.replace("glove_r", "gloveR")
+			modelType = 'gloveR'
+			modelSubtype = None
+		else:
+			modelType = 'parts'
+			modelSubtype = baseName
+
+		suffixIndex = 0
+		while True:
+			if suffixIndex == 0:
+				suffixComponent = ""
+			else:
+				suffixComponent = "_%s" % suffixIndex
+				suffixIndex += 1
+
+			if modelSubtype is None:
+				subtypeComponent = ""
+			else:
+				subtypeComponent = "_%s" % modelSubtype
+
+			typeComponent = modelType.replace("_", "").lower()
+
+			modelFilename = "%s%s%s.model" % (typeComponent, subtypeComponent, suffixComponent)
+			modelPath = os.path.join(destinationDirectory, modelFilename)
+			if not os.path.exists(modelPath):
+				break
+
+		modelFile = fmdl2model.convertFmdl(fmdlFile, fmdlMeshMaterialNames)
+		fmdl2model.saveModel(modelFile, modelPath)
+
+	if faceDiffBinFilename is not None:
+		faceDiffBin = open(faceDiffBinFilename, 'rb').read()
+		if not faceDiffFileIsEmpty(faceDiffBin):
+			open(os.path.join(destinationDirectory, "face_diff.bin"), 'wb').write(faceDiffBin)
+
 
 if __name__ == "__main__":
 	if len(sys.argv) < 2:

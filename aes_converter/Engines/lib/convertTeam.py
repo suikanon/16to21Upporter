@@ -374,10 +374,13 @@ def convertTeamFiles(sourceDirectory, destinationDirectory):
 
 def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
 	teamName = getTeamName(sourceDirectory)
+	print(teamName)
 	
 	sourceTeamId = getTeamId(os.path.join(os.path.dirname(os.path.realpath(__file__)), "teams_list_19.txt"), teamName)
 	destinationTeamId = getTeamId(os.path.join(os.path.dirname(os.path.realpath(__file__)), "teams_list_16.txt"), teamName)
 	# TODO: support a list for this
+	if not destinationTeamId or not sourceTeamId: print("ERROR: Team missing from teams list files")
+
 	bootsGlovesBaseId = 101 + (destinationTeamId - 701) * 25
 	
 	print("Converting team %i - /%s/" % (sourceTeamId, teamName))

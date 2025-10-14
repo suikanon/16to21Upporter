@@ -153,13 +153,13 @@ ID Name
 852 Invitational 12
 853 Invitational 13
 854 Invitational 14
-855 Invitational 15
+855 pcg
 856 Invitational 16
 857 Invitational 17
 858 Invitational 18
 859 Invitational 19
 860 Invitational 20
-861 Invitational 21
+861 wah
 862 Invitational 22
 863 Invitational 23
 864 Invitational 24
@@ -168,7 +168,7 @@ ID Name
 867 Invitational 27
 868 Invitational 28
 869 Invitational 29
-870 Invitational 30
+870 lig
 871 Invitational 31
 872 Invitational 32
 873 Invitational 33
@@ -177,7 +177,7 @@ ID Name
 876 Invitational 36
 877 Invitational 37
 878 Invitational 38
-879 Invitational 39
+879 pink
 880 Invitational 40
 881 Invitational 41
 882 Invitational 42

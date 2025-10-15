@@ -5,7 +5,7 @@ import sys
 from PIL import Image
 
 from . import save16, save19
-from .convertFaceFolder import convertBootsFolder, convertFaceFolder, convertGlovesFolder
+from .convertFaceFolder21 import convertBootsFolder, convertFaceFolder, convertGlovesFolder
 from .material import convertTextureFile
 from .util import iglob, ijoin
 
@@ -130,19 +130,16 @@ def mkdir(containingDirectory, name):
 
 
 #
-# Converts a player in a pes19 export directory into a pes16 directory, and creates the save data for that player.
-# If possible, this will create a single face folder containing the entire model.
-# If the pes19 player doesn't have a face folder (and therefore has an ingame face), this will instead
-# create boots and gloves folders.
+# Converts a player in a pes16 export directory into a pes19 directory, and creates the save data for that player.
 #
 def convertPlayer(sourceDirectory, destinationDirectory, relativePlayerId, bootsGlovesBaseId, sourcePlayerData,
                   oldDestinationPlayerData):
-    (bootsGlovesIdData,) = struct.unpack('< I', sourcePlayerData[120: 124])
-    sourceBootsId = (bootsGlovesIdData >> 4) & ((1 << 14) - 1)
-    sourceGlovesId = (bootsGlovesIdData >> 18) & ((1 << 14) - 1)
-    print("ids")
-    print(sourceBootsId)
-    print(sourceGlovesId)
+    # Figure out the correct boots and glove IDs
+    # (bootsGlovesIdData,) = struct.unpack('< I', sourcePlayerData[1][104: 108])
+
+    sourceBootsId = 0# (bootsGlovesIdData >> 4) & ((1 << 14) - 1)
+    sourceGlovesId = 0# (bootsGlovesIdData >> 18) & ((1 << 14) - 1)
+
     #
     # Find source folders
     #
@@ -451,10 +448,13 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
             print("ERROR: Player %s not found in pes19 save" % destinationPlayerId)
 
         sourcePlayer = sourcePlayers[sourcePlayerId]
+        print("source player")
+        print(sourcePlayer)
         oldDestinationPlayer = oldDestinationPlayers[destinationPlayerId]
 
-        (oldDestinationPlayerData, oldDestinationPlayerAestheticsData) = oldDestinationPlayer
-        if oldDestinationPlayerData is None or oldDestinationPlayerAestheticsData is None:
+        print(oldDestinationPlayer)
+        oldDestinationPlayerData = oldDestinationPlayer
+        if oldDestinationPlayerData is None:
             print("ERROR: Incomplete player %s found in pes19 save" % destinationPlayerId)
 
         newDestinationPlayers[destinationPlayerId] = convertPlayer(

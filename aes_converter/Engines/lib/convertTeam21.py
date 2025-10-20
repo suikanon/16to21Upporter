@@ -130,130 +130,97 @@ def mkdir(containingDirectory, name):
 
 
 #
-# Converts a player in a pes16 export directory into a pes19 directory, and creates the save data for that player.
+# Converts a player in a PES16 export directory into a PES21 directory, and creates the save data for that player.
 #
 def convertPlayer(sourceDirectory, destinationDirectory, relativePlayerId, bootsGlovesBaseId, sourcePlayerData,
                   oldDestinationPlayerData):
-    # Figure out the correct boots and glove IDs
-    # (bootsGlovesIdData,) = struct.unpack('< I', sourcePlayerData[1][104: 108])
+    """
+    Convert a player from PES16 format to PES21 format.
 
-    sourceBootsId = 0# (bootsGlovesIdData >> 4) & ((1 << 14) - 1)
-    sourceGlovesId = 0# (bootsGlovesIdData >> 18) & ((1 << 14) - 1)
+    PES16 has unified face folders containing all models (face/boots/gloves) together.
+    PES21 has separate Faces/, Boots/, and Gloves/ folders at the team level.
+
+    Args:
+        sourceDirectory: PES16 export directory
+        destinationDirectory: PES21 export directory
+        relativePlayerId: Player number within team (1-23)
+        bootsGlovesBaseId: Base ID for calculating boots/gloves IDs
+        sourcePlayerData: Source player save data (PES16 format)
+        oldDestinationPlayerData: Destination player save data template (PES21 format)
+
+    Returns:
+        Updated player save data for PES21
+    """
 
     #
-    # Find source folders
+    # Find source unified face folder (PES16 format)
+    # Get all face folders and select the one for this player based on relativePlayerId
     #
     sourceFaceDirectory = None
-    sourceFacesDirectory = ijoin(sourceDirectory, "Faces")
+    sourceFacesDirectory = ijoin(sourceDirectory, "Faces")  # PES16 uses "Faces" folder
     if sourceFacesDirectory is not None:
-        sourceFaceDirectories = iglob(sourceFacesDirectory, "???%02i*" % relativePlayerId)
-        if len(sourceFaceDirectories) > 0:
-            if len(sourceFaceDirectories) > 1:
-                print("WARNING: Found more than 1 face folder for player %02i, using '%s'" % (
-                relativePlayerId, sourceFaceDirectories[0]))
-            sourceFaceDirectory = sourceFaceDirectories[0]
-    else:
-        print("WARNING: Cannot find Faces folder in export '%s'" % sourceDirectory)
+        # Get all player folders and sort them
+        playerFolders = []
+        for item in os.listdir(sourceFacesDirectory):
+            itemPath = os.path.join(sourceFacesDirectory, item)
+            if os.path.isdir(itemPath):
+                playerFolders.append(itemPath)
 
-    sourceBootDirectory = None
-    if sourceBootsId is not None:
-        sourceBootsDirectory = ijoin(sourceDirectory, "Boots")
-        if sourceBootsDirectory is not None:
-            sourceBootDirectories = iglob(sourceBootsDirectory, "k%04i*" % sourceBootsId)
-            if len(sourceBootDirectories) > 0:
-                if len(sourceBootDirectories) > 1:
-                    print("WARNING: Found more than 1 boots folder for boots k%04i, using '%s'" % (
-                    sourceBootsId, sourceBootDirectories[0]))
-                sourceBootDirectory = sourceBootDirectories[0]
+        # Sort folders to ensure consistent ordering
+        playerFolders.sort()
 
-    sourceGloveDirectory = None
-    if sourceGlovesId is not None:
-        sourceGlovesDirectory = ijoin(sourceDirectory, "Gloves")
-        if sourceGlovesDirectory is not None:
-            sourceGloveDirectories = iglob(sourceGlovesDirectory, "g%04i*" % sourceGlovesId)
-            if len(sourceGloveDirectories) > 0:
-                if len(sourceGloveDirectories) > 1:
-                    print("WARNING: Found more than 1 gloves folder for boots g%04i, using '%s'" % (
-                    sourceGlovesId, sourceGloveDirectories[0]))
-                sourceGloveDirectory = sourceGloveDirectories[0]
+        # Select the folder based on relativePlayerId (1-indexed, so subtract 1)
+        folderIndex = relativePlayerId - 1
+        if 0 <= folderIndex < len(playerFolders):
+            sourceFaceDirectory = playerFolders[folderIndex]
+        else:
+            print("  WARNING: No face folder found for player index %i (only %i folders available)" % (relativePlayerId, len(playerFolders)))
 
-    #
-    # Build face/boots/gloves folders
-    #
+    # Get boots.skl path from the example/template folder
+    # TODO move that file to lib
+    bootsSklPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "example_pes21", "numbers", "Boots", "k4226 - Cheeky Colon 3", "boots.skl")
+    if not os.path.exists(bootsSklPath):
+        print("WARNING: boots.skl template not found at expected location")
+        bootsSklPath = None
 
     commonDirectory = mkdir(destinationDirectory, "Common")
     bootsId = None
     glovesId = None
+    hasFaceModel = False
 
-    facePortraitFound = False
     if sourceFaceDirectory is not None:
         #
-        # Build a unified face folder containing the face, boots, and gloves
+        # Convert the unified PES16 face folder into separate PES21 Faces/Boots/Gloves folders
         #
+        # Convert using convertFaceFolder which handles splitting into separate folders
+        convertFaceFolder([sourceFaceDirectory], destinationDirectory, commonDirectory, bootsSklPath)
 
-        sourceModelDirectories = [sourceFaceDirectory]
-        if sourceBootDirectory is not None:
-            sourceModelDirectories.append(sourceBootDirectory)
-        if sourceGloveDirectory is not None:
-            sourceModelDirectories.append(sourceGloveDirectory)
+        # Check if face models were actually created (to determine hasFaceModel)
+        facesFolder = ijoin(destinationDirectory, "Faces")
+        if facesFolder is not None:
+            fmdlFiles = iglob(facesFolder, "*.fmdl")
+            if len(fmdlFiles) > 0:
+                hasFaceModel = True
 
-        faceDirectory = mkdir(mkdir(destinationDirectory, "Faces"), os.path.basename(sourceFaceDirectory))
-        convertFaceFolder(sourceModelDirectories, faceDirectory, commonDirectory)
-
-        portraitFilename = ijoin(sourceFaceDirectory, "portrait.dds")
-        if portraitFilename is not None:
-            facePortraitFound = True
-            shutil.copy(portraitFilename, os.path.join(faceDirectory, "portrait.dds"))
-
-        hasFaceModel = True
-    else:
-        #
-        # This player has an ingame face, which we want to retain.
-        # Convert the boots and gloves separately.
-        #
-
-        if sourceBootDirectory is not None:
+        # Assign boots and gloves IDs if those folders were created
+        bootsFolder = ijoin(destinationDirectory, "Boots")
+        if bootsFolder is not None:
             bootsId = bootsGlovesBaseId + relativePlayerId
-            bootsDirectoryName = "k%04i" % bootsId
-            bootsDirectoryTitle = os.path.basename(sourceBootDirectory)[5:].strip(" -_")
-            if len(bootsDirectoryTitle) > 0:
-                bootsDirectoryName += " - %s" % bootsDirectoryTitle
-            destinationBootsDirectory = mkdir(mkdir(destinationDirectory, "Boots"), bootsDirectoryName)
-            convertBootsFolder(sourceBootDirectory, destinationBootsDirectory, commonDirectory)
 
-        if sourceGloveDirectory is not None:
+        glovesFolder = ijoin(destinationDirectory, "Gloves")
+        if glovesFolder is not None:
             glovesId = bootsGlovesBaseId + relativePlayerId
-            gloveDirectoryName = "g%04i" % glovesId
-            gloveDirectoryTitle = os.path.basename(sourceGloveDirectory)[5:].strip(" -_")
-            if len(gloveDirectoryTitle) > 0:
-                gloveDirectoryName += " - %s" % gloveDirectoryTitle
-            destinationGlovesDirectory = mkdir(mkdir(destinationDirectory, "Gloves"), gloveDirectoryName)
-            convertGlovesFolder(sourceGloveDirectory, destinationGlovesDirectory, commonDirectory)
-
+    else:
+        # No face folder found for this player - they use an in-game face
+        print("  No custom face folder found for player %02i, using in-game face" % relativePlayerId)
         hasFaceModel = False
 
     #
-    # Convert portrait
+    # Convert save data
     #
-    if not facePortraitFound:
-        sourcePortraitsDirectory = ijoin(sourceDirectory, "Portraits")
-        if sourcePortraitsDirectory is not None:
-            portraitFilenames = iglob(sourcePortraitsDirectory, "player_???%02i.dds")
-            if len(portraitFilenames) > 0:
-                if len(portraitFilenames) > 1:
-                    print("WARNING: Found more then 1 portrait for player %02i, using '%s'" % (
-                    relativePlayerId, portraitFilenames[0]))
-                portraitsDirectory = mkdir(destinationDirectory, "Portraits")
-                shutil.copy(portraitFilenames[0],
-                            os.path.join(portraitsDirectory, "player_XXX%02i.dds" % relativePlayerId))
+    # newDestinationPlayerData = convertPlayerSaveData(sourcePlayerData, oldDestinationPlayerData, hasFaceModel, bootsId, glovesId)
 
-    #
-    # Convert save data, lookup boots and gloves ID
-    #
-    newDestinationPlayerData = convertPlayerSaveData(sourcePlayerData, oldDestinationPlayerData, hasFaceModel, bootsId,
-                                                     glovesId)
-
-    return newDestinationPlayerData
+    # return newDestinationPlayerData
 
 
 def getTeamName(sourceDirectory):
@@ -448,8 +415,6 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
             print("ERROR: Player %s not found in pes19 save" % destinationPlayerId)
 
         sourcePlayer = sourcePlayers[sourcePlayerId]
-        print("source player")
-        print(sourcePlayer)
         oldDestinationPlayer = oldDestinationPlayers[destinationPlayerId]
 
         print(oldDestinationPlayer)

@@ -942,6 +942,8 @@ def readModelBuffer(modelBuffer, parserSettings):
 	output = ModelFile()
 	output.bones = bones
 	output.materials = materials
+	print("model materials")
+	print(materials)
 	output.meshes = meshes
 	output.extensionHeaders = modelAnnotations
 	return (output, warnings)

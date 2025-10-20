@@ -131,80 +131,17 @@ def convertBones(modelBones):
     return fmdlBones, {modelBone: fmdlBonesByName[name] for modelBone, name in modelBoneNames.items()}
 
 
-def convertMaterials(model) :
-    materials = FmdlFile.parseMaterials(fmdl, strings)
-    textures = FmdlFile.parseTextures(fmdl, strings)
-    materialParameters = FmdlFile.parseMaterialParameters(fmdl)
-    assignments = FmdlFile.parseTextureMaterialParameterAssignments(fmdl, strings)
-
+def convertMaterials(model, sourceDirectory) :
     materialInstances = []
-    for definition in fmdl.segment0Blocks[4]:
-        (
-            nameStringID,
-            padding0,
-            materialID,
-            textureCount,
-            materialParameterCount,
-            firstTextureID,
-            firstMaterialParameterID,
-            padding1
-        ) = unpack('< H H H BB H H I', definition)
 
-        if not nameStringID < len(strings):
-            raise InvalidFmdl("Invalid string ID %d referenced by material instance" % nameStringID)
-        instanceName = strings[nameStringID]
 
-        if not materialID < len(materials):
-            raise InvalidFmdl("Invalid material ID %d referenced by material instance" % materialID)
-        (instanceTechnique, instanceShader) = materials[materialID]
-
-        instanceTextures = []
-        for i in range(firstTextureID, firstTextureID + textureCount):
-            if not i < len(assignments):
-                raise InvalidFmdl(
-                    "Invalid texture / material parameter assignment %d referenced by material instance" % i)
-            (textureName, textureID) = assignments[i]
-
-            if not textureID < len(textures):
-                raise InvalidFmdl("Invalid texture %d referenced by texture assignment" % textureID)
-            texture = textures[textureID]
-
-            if textureName in instanceTextures:
-                raise InvalidFmdl("Duplicate texture name '%s' used by material instance" % textureName)
-
-            instanceTextures.append((textureName, texture))
-
-        instanceMaterialParameters = []
-        for i in range(firstMaterialParameterID, firstMaterialParameterID + materialParameterCount):
-            if not i < len(assignments):
-                raise InvalidFmdl(
-                    "Invalid texture / material parameter assignment %d referenced by material instance" % i)
-            (materialParameterName, materialParameterID) = assignments[i]
-
-            if not materialParameterID < len(materialParameters):
-                raise InvalidFmdl(
-                    "Invalid material parameter %d referenced by material parameter assignment" % materialParameterID)
-            parameters = materialParameters[materialParameterID]
-
-            if materialParameterName in instanceMaterialParameters:
-                raise InvalidFmdl(
-                    "Duplicate material parameters '%s' used by material instance" % materialParameterName)
-
-            instanceMaterialParameters.append((materialParameterName, parameters))
-
-        materialInstance = FmdlFile.MaterialInstance()
-        materialInstance.name = instanceName
-        materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR_Solid'
-        materialInstance.shader = 'fox3dfw_constant_srgb_ndr_solid'
-        materialInstance.textures = instanceTextures
-        materialInstance.parameters = instanceMaterialParameters
-        materialInstances.append(materialInstance)
     return materialInstances
 
 
-def convertModel(model, modelMeshMaterialNames):
+def convertModel(model, sourceDirectory, modelMeshMaterialNames):
     fmdlFile = FmdlFile.FmdlFile()
     fmdlFile.bones, modelFmdlBones = convertBones(model.bones)
+    fmdlFile.materialInstances = convertMaterials(model, sourceDirectory)
     fmdlFile.meshes = convertMeshes(model, modelMeshMaterialNames, modelFmdlBones)
 
     if len(fmdlFile.meshes) == 0:
@@ -226,19 +163,13 @@ def convertModel(model, modelMeshMaterialNames):
             ),
         )
 
-    materials = set()
-    for modelMesh in fmdlFile.meshes:
-        materials.add(modelMesh.material)
-    fmdlFile.materials = list(materials)
-
-    fmdlFile.extensionHeaders.add('Skeleton-Type: Simplified')
 
     return fmdlFile
 
 
 def loadModel(filename):
-    modelFile = ModelFile.ModelFile()
-    modelFile.readFile(filename)
+    #modelFile = ModelFile.ModelFile()
+    modelFile = ModelFile.readModelFile(filename, ModelFile.ParserSettings())[0]
 
     modelFile = ModelMeshSplitting.decodeModelSplitMeshes(modelFile)
     modelFile = ModelSplitVertexEncoding.decodeModelVertexLoopPreservation(modelFile)

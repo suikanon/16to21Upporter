@@ -791,7 +791,19 @@ class FmdlFile:
 			materialInstance.shader = instanceShader
 			materialInstance.textures = instanceTextures
 			materialInstance.parameters = instanceMaterialParameters
+			print(materialInstance)
+			print(materialInstance.name)
+			print(materialInstance.technique)
+			print(materialInstance.shader)
+			print(materialInstance.textures)
+			for mat in materialInstance.textures:
+				print(mat[1].filename)
+				print(mat[1].directory)
+			print(materialInstance.parameters)
 			materialInstances.append(materialInstance)
+		print("material instances")
+		print(materialInstances)
+		print("printed material isntances")
 		return materialInstances
 	
 	@staticmethod

@@ -1,271 +1,324 @@
-import base64
 import os
+import shutil
 import struct
 import sys
-from xml.etree import ElementTree
 
-from .util import ijoin
-from . import fmdl2model, material
+from .util import ijoin, iglob
+from . import model2fmdl, material
+from . import FmdlFile, ModelFile
 
-def parseFpkXml(xmlPath, containingDirectory):
-	output = []
-	faceFpkRoot = ElementTree.parse(xmlPath).getroot()
-	if faceFpkRoot.tag != "ArchiveFile":
-		print("WARNING: Invalid .fpk.xml file '%s', skipping" % xmlPath)
-		return output
-	for entriesTag in faceFpkRoot:
-		if entriesTag.tag == "Entries":
-			for entryTag in entriesTag:
-				path = entryTag.attrib["FilePath"]
-				fullPath = ijoin(containingDirectory, path)
-				if fullPath is None:
-					print("WARNING: Nonexistent file '%s' referenced by '%s', skipping" % (path, xmlPath))
-					continue
-				output.append(fullPath)
-	return output
 
-def convertBootsFolder(sourceDirectory, destinationDirectory, commonDestinationDirectory):
-	bootsFmdlFilename = ijoin(sourceDirectory, "boots.fmdl")
-	if bootsFmdlFilename is None:
-		print("WARNING: Boots folder '%s' does not contain boots.fmdl" % sourceDirectory)
+def convertBootsFolder(sourceDirectory, destinationDirectory, commonDestinationDirectory, bootsSklPath):
+	"""
+	Convert a PES16 boots folder to PES21 format.
+
+	Args:
+	    sourceDirectory: Path to source boots folder (PES16 with .model files)
+	    destinationDirectory: Path to destination boots folder (PES21 with .fmdl files)
+	    commonDestinationDirectory: Path to common textures folder (unused for PES21)
+	    bootsSklPath: Path to the boots.skl skeleton file to copy
+	"""
+	# Find boots.model file
+	bootsModelFile = ijoin(sourceDirectory, "boots.model")
+	if bootsModelFile is None:
+		print("WARNING: Boots folder '%s' does not contain boots.model" % sourceDirectory)
 		return
-	
-	fmdlFile = fmdl2model.loadFmdl(bootsFmdlFilename)
-	fmdl = (bootsFmdlFilename, os.path.dirname(bootsFmdlFilename), fmdlFile)
-	
-	(materialFile, fmdlMeshMaterialNames) = material.buildMaterials([fmdl], destinationDirectory, commonDestinationDirectory)
-	open(os.path.join(destinationDirectory, "boots.mtl"), 'wb').write(materialFile)
-	
-	modelFile = fmdl2model.convertFmdl(fmdlFile, fmdlMeshMaterialNames)
-	fmdl2model.saveModel(modelFile, os.path.join(destinationDirectory, "boots.model"))
+
+	# Convert .model to .fmdl
+	try:
+		modelFileObj = model2fmdl.loadModel(bootsModelFile)
+		outputFmdl = os.path.join(destinationDirectory, "boots.fmdl")
+		model2fmdl.saveFmdl(model2fmdl.convertModel(modelFileObj), outputFmdl)
+	except Exception as e:
+		print(f"WARNING: Failed to convert boots.model: {e}")
+		return
+
+	# Copy boots.skl skeleton file
+	if bootsSklPath and os.path.exists(bootsSklPath):
+		shutil.copy(bootsSklPath, os.path.join(destinationDirectory, "boots.skl"))
+	else:
+		print("WARNING: boots.skl not found, boots folder may not work correctly")
+
+	# Create boots.fpk.xml
+	fpkXml = os.path.join(destinationDirectory, "boots.fpk.xml")
+	with open(fpkXml, 'w', encoding='utf-8') as f:
+		f.write('<?xml version="1.0"?>\n')
+		f.write('<ArchiveFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="FpkFile" Name="boots.fpk" FpkType="Fpk">\n')
+		f.write('  <Entries>\n')
+		f.write('    <Entry FilePath="boots.skl" />\n')
+		f.write('    <Entry FilePath="boots.fmdl" />\n')
+		f.write('  </Entries>\n')
+		f.write('  <References />\n')
+		f.write('</ArchiveFile>\n')
+
+	# Copy all texture files (.dds, .ftex)
+	for ext in ['*.dds', '*.ftex']:
+		textureFiles = iglob(sourceDirectory, ext)
+		for texFile in textureFiles:
+			shutil.copy(texFile, os.path.join(destinationDirectory, os.path.basename(texFile)))
+
 
 def convertGlovesFolder(sourceDirectory, destinationDirectory, commonDestinationDirectory):
-	gloveLFilename = ijoin(sourceDirectory, "glove_l.fmdl")
-	gloveRFilename = ijoin(sourceDirectory, "glove_r.fmdl")
-	
-	fmdls = []
-	if gloveLFilename is None:
-		gloveLFmdlFile = None
-	else:
-		gloveLFmdlFile = fmdl2model.loadFmdl(gloveLFilename)
-		fmdls.append((gloveLFilename, os.path.dirname(gloveLFilename), gloveLFmdlFile))
-	if gloveRFilename is None:
-		gloveRFmdlFile = None
-	else:
-		gloveRFmdlFile = fmdl2model.loadFmdl(gloveRFilename)
-		fmdls.append((gloveRFilename, os.path.dirname(gloveRFilename), gloveRFmdlFile))
-	
-	(materialFile, fmdlMeshMaterialNames) = material.buildMaterials(fmdls, destinationDirectory, commonDestinationDirectory)
-	open(os.path.join(destinationDirectory, "materials.mtl"), 'wb').write(materialFile)
-	
-	if gloveLFmdlFile is not None:
-		modelFile = fmdl2model.convertFmdl(gloveLFmdlFile, fmdlMeshMaterialNames)
-		fmdl2model.saveModel(modelFile, os.path.join(destinationDirectory, "glove_l.model"))
-	if gloveRFmdlFile is not None:
-		modelFile = fmdl2model.convertFmdl(gloveRFmdlFile, fmdlMeshMaterialNames)
-		fmdl2model.saveModel(modelFile, os.path.join(destinationDirectory, "glove_r.model"))
+	"""
+	Convert a PES16 gloves folder to PES21 format.
+
+	Args:
+	    sourceDirectory: Path to source gloves folder (PES16 with .model files)
+	    destinationDirectory: Path to destination gloves folder (PES21 with .fmdl files)
+	    commonDestinationDirectory: Path to common textures folder (unused for PES21)
+	"""
+	# Convert left and right glove .model files to .fmdl
+	hasGloves = False
+	for gloveName in ["glove_l", "glove_r"]:
+		gloveModelFile = ijoin(sourceDirectory, f"{gloveName}.model")
+		if gloveModelFile is not None:
+			try:
+				modelFileObj = model2fmdl.loadModel(gloveModelFile)
+
+				model = (gloveModelFile, os.path.dirname(gloveModelFile), modelFileObj)
+				(materialFile, fmdlMeshMaterialNames) = material.buildFmdlMaterials([model], destinationDirectory,
+																				commonDestinationDirectory)
+				outputFmdl = os.path.join(destinationDirectory, f"{gloveName}.fmdl")
+				model2fmdl.saveFmdl(model2fmdl.convertModel(modelFileObj, fmdlMeshMaterialNames), outputFmdl)
+				hasGloves = True
+			except Exception as e:
+				print(f"WARNING: Failed to convert {gloveName}.model: {e}")
+
+	if not hasGloves:
+		print("WARNING: Gloves folder '%s' does not contain glove_l.model or glove_r.model" % sourceDirectory)
+		return
+
+	# Create glove.fpk.xml
+	fpkXml = os.path.join(destinationDirectory, "glove.fpk.xml")
+	with open(fpkXml, 'w', encoding='utf-8') as f:
+		f.write('<?xml version="1.0"?>\n')
+		f.write('<ArchiveFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="FpkFile" Name="glove.fpk" FpkType="Fpk">\n')
+		f.write('  <Entries>\n')
+		f.write('    <Entry FilePath="glove_l.fmdl" />\n')
+		f.write('    <Entry FilePath="glove_r.fmdl" />\n')
+		f.write('  </Entries>\n')
+		f.write('  <References />\n')
+		f.write('</ArchiveFile>\n')
+
+	# Copy all texture files (.dds, .ftex)
+	for ext in ['*.dds', '*.ftex']:
+		textureFiles = iglob(sourceDirectory, ext)
+		for texFile in textureFiles:
+			shutil.copy(texFile, os.path.join(destinationDirectory, os.path.basename(texFile)))
 
 def faceDiffFileIsEmpty(faceDiffBin):
 	(xScale, yScale, zScale) = struct.unpack('< 3f', faceDiffBin[8:20])
 	return xScale < 0.1 and yScale < 0.1 and zScale < 0.1
 
-def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestinationDirectory):
+
+def buildFmdlMaterials():
+	material = FmdlFile.FmdlFile.MaterialInstance()
+
+	return
+
+
+def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestinationDirectory, bootsSklPath, playerFolderName=None):
+	"""
+	Convert a PES16 face folder (unified face/boots/gloves) to PES21 format.
+
+	Args:
+	    sourceDirectories: List of source face folders (PES16 with .model files)
+	    destinationDirectory: Path to destination root folder (PES21 with separate Faces/Boots/Gloves folders)
+	    commonDestinationDirectory: Path to common textures folder (unused for PES21)
+	    bootsSklPath: Path to the boots.skl skeleton file to copy to boots folders
+	    playerFolderName: Name to use for the player subfolders (e.g., "XXX01 - Snuffy")
+	"""
+	# Determine folder name from the first source directory if not provided
+	if playerFolderName is None and len(sourceDirectories) > 0:
+		playerFolderName = os.path.basename(sourceDirectories[0])
+
+	# Collect all .model files from all source directories
+	faceModels = []  # face_neck type models
+	bootsModels = []  # parts/uniform type models
+	gloveModels = []  # gloveL/gloveR type models
 	faceDiffBinFilename = None
-	fmdlFiles = []
-	
-	for directory in sourceDirectories:
-		faceFpkFilename = ijoin(directory, "face.fpk.xml")
-		bootsFpkFilename = ijoin(directory, "boots.fpk.xml")
-		gloveFpkFilename = ijoin(directory, "glove.fpk.xml")
-
-		fpkFilenames = [filename for filename in [
-			ijoin(directory, "face.fpk.xml"),
-			ijoin(directory, "boots.fpk.xml"),
-			ijoin(directory, "glove.fpk.xml"),
-		] if filename is not None]
-		
-		if len(fpkFilenames) == 0:
-			print("WARNING: No .xpk.fml file found in model folder '%s', skipping folder" % (directory))
-			continue
-		if len(fpkFilenames) > 1:
-			print("WARNING: Multiple .xpk.fml file found in model folder '%s', skipping folder" % (directory))
-			continue
-		
-		for filename in parseFpkXml(fpkFilenames[0], directory):
-			if filename.lower().endswith("face_diff.bin"):
-				faceDiffBinFilename = filename
-			elif filename.lower().endswith(".fmdl"):
-				fmdlFiles.append(filename)
-			elif filename.lower().endswith("boots.skl"):
-				continue
-			else:
-				print("WARNING: Unknown file '%s' referenced by '%s', skipping" % (filename, fpkFilenames[0]))
-				continue
-	
-	fmdls = []
-	for filename in fmdlFiles:
-		containingDirectory = os.path.dirname(filename)
-		fmdlFile = fmdl2model.loadFmdl(filename)
-		
-		fmdls.append((filename, containingDirectory, fmdlFile))
-	
-	(materialFile, fmdlMeshMaterialNames) = material.buildMaterials(fmdls, destinationDirectory, commonDestinationDirectory)
-	open(os.path.join(destinationDirectory, 'materials.mtl'), 'wb').write(materialFile)
-	
-	for (filename, containingDirectory, fmdlFile) in fmdls:
-		baseName = os.path.basename(filename)[:-5].lower()
-		
-		if 'face_high' in baseName:
-			modelType = 'face_neck'
-			modelSubtype = 'face'
-		elif 'hair_high' in baseName:
-			modelType = 'face_neck'
-			modelSubtype = 'hair'
-		elif 'oral' in baseName:
-			modelType = 'face_neck'
-			modelSubtype = 'oral'
-		elif 'boots' in baseName:
-			modelType = 'parts'
-			modelSubtype = 'body'
-		elif 'glove_l' in baseName:
-			baseName = baseName.replace("glove_l", "gloveL")
-			modelType = 'gloveL'
-			modelSubtype = None
-		elif 'glove_r' in baseName:
-			baseName = baseName.replace("glove_r", "gloveR")
-			modelType = 'gloveR'
-			modelSubtype = None
-		else:
-			modelType = 'parts'
-			modelSubtype = baseName
-		
-		suffixIndex = 0
-		while True:
-			if suffixIndex == 0:
-				suffixComponent = ""
-			else:
-				suffixComponent = "_%s" % suffixIndex
-				suffixIndex += 1
-			
-			if modelSubtype is None:
-				subtypeComponent = ""
-			else:
-				subtypeComponent = "_%s" % modelSubtype
-			
-			typeComponent = modelType.replace("_", "").lower()
-			
-			modelFilename = "%s%s%s.model" % (typeComponent, subtypeComponent, suffixComponent)
-			modelPath = os.path.join(destinationDirectory, modelFilename)
-			if not os.path.exists(modelPath):
-				break
-		
-		modelFile = fmdl2model.convertFmdl(fmdlFile, fmdlMeshMaterialNames)
-		fmdl2model.saveModel(modelFile, modelPath)
-	
-	if faceDiffBinFilename is not None:
-		faceDiffBin = open(faceDiffBinFilename, 'rb').read()
-		if not faceDiffFileIsEmpty(faceDiffBin):
-			open(os.path.join(destinationDirectory, "face_diff.bin"), 'wb').write(faceDiffBin)
-
-
-def convertModelFaceFolder(sourceDirectories, destinationDirectory, commonDestinationDirectory):
-	faceDiffBinFilename = None
-	fmdlFiles = []
+	portraitFilename = None
+	allTextureFiles = []
 
 	for directory in sourceDirectories:
-		faceFpkFilename = ijoin(directory, "face.fpk.xml")
-		bootsFpkFilename = ijoin(directory, "boots.fpk.xml")
-		gloveFpkFilename = ijoin(directory, "glove.fpk.xml")
+		# Find all .model files
+		modelFiles = iglob(directory, "*.model")
 
-		fpkFilenames = [filename for filename in [
-			ijoin(directory, "face.fpk.xml"),
-			ijoin(directory, "boots.fpk.xml"),
-			ijoin(directory, "glove.fpk.xml"),
-		] if filename is not None]
+		for modelFile in modelFiles:
+			baseName = os.path.basename(modelFile)[:-6].lower()  # Remove .model extension
 
-		if len(fpkFilenames) == 0:
-			print("WARNING: No .xpk.fml file found in model folder '%s', skipping folder" % (directory))
-			continue
-		if len(fpkFilenames) > 1:
-			print("WARNING: Multiple .xpk.fml file found in model folder '%s', skipping folder" % (directory))
-			continue
-
-		for filename in parseFpkXml(fpkFilenames[0], directory):
-			if filename.lower().endswith("face_diff.bin"):
-				faceDiffBinFilename = filename
-			elif filename.lower().endswith(".fmdl"):
-				fmdlFiles.append(filename)
-			elif filename.lower().endswith("boots.skl"):
-				continue
+			# Categorize by type based on filename
+			if 'face' in baseName or 'hair' in baseName or 'oral' in baseName:
+				faceModels.append(modelFile)
+			elif 'glove_l' in baseName or 'glove_r' in baseName:
+				gloveModels.append(modelFile)
 			else:
-				print("WARNING: Unknown file '%s' referenced by '%s', skipping" % (filename, fpkFilenames[0]))
-				continue
+				# Everything else goes to boots (parts/uniform)
+				bootsModels.append(modelFile)
 
-	fmdls = []
-	for filename in fmdlFiles:
-		containingDirectory = os.path.dirname(filename)
-		fmdlFile = fmdl2model.loadFmdl(filename)
+		# Look for face_diff.bin
+		faceDiffFile = ijoin(directory, "face_diff.bin")
+		if faceDiffFile is not None and faceDiffBinFilename is None:
+			faceDiffBinFilename = faceDiffFile
 
-		fmdls.append((filename, containingDirectory, fmdlFile))
+		# Look for portrait
+		portraitFile = ijoin(directory, "portrait.dds")
+		if portraitFile is not None and portraitFilename is None:
+			portraitFilename = portraitFile
 
-	(materialFile, fmdlMeshMaterialNames) = material.buildMaterials(fmdls, destinationDirectory,
-																	commonDestinationDirectory)
-	open(os.path.join(destinationDirectory, 'materials.mtl'), 'wb').write(materialFile)
+		# Collect all texture files
+		for ext in ['*.dds', '*.ftex']:
+			textureFiles = iglob(directory, ext)
+			for texFile in textureFiles:
+				if 'portrait' not in os.path.basename(texFile).lower():
+					allTextureFiles.append(texFile)
 
-	for (filename, containingDirectory, fmdlFile) in fmdls:
-		baseName = os.path.basename(filename)[:-5].lower()
+	# Convert face models if any exist
+	if len(faceModels) > 0:
+		# Create Faces/XXX01 - PlayerName/ subfolder
+		facesParentFolder = os.path.join(destinationDirectory, "Faces")
+		if not os.path.exists(facesParentFolder):
+			os.makedirs(facesParentFolder)
 
-		if 'face_high' in baseName:
-			modelType = 'face_neck'
-			modelSubtype = 'face'
-		elif 'hair_high' in baseName:
-			modelType = 'face_neck'
-			modelSubtype = 'hair'
-		elif 'oral' in baseName:
-			modelType = 'face_neck'
-			modelSubtype = 'oral'
-		elif 'boots' in baseName:
-			modelType = 'parts'
-			modelSubtype = 'body'
-		elif 'glove_l' in baseName:
-			baseName = baseName.replace("glove_l", "gloveL")
-			modelType = 'gloveL'
-			modelSubtype = None
-		elif 'glove_r' in baseName:
-			baseName = baseName.replace("glove_r", "gloveR")
-			modelType = 'gloveR'
-			modelSubtype = None
+		facesFolder = os.path.join(facesParentFolder, playerFolderName)
+		if not os.path.exists(facesFolder):
+			os.makedirs(facesFolder)
+
+		for modelFile in faceModels:
+			baseName = os.path.basename(modelFile)[:-6]  # Remove .model
+			try:
+				modelFileObj = model2fmdl.loadModel(modelFile)
+				outputFmdl = os.path.join(facesFolder, f"{baseName}.fmdl")
+				model2fmdl.saveFmdl(model2fmdl.convertModel(modelFileObj), outputFmdl)
+			except Exception as e:
+				print(f"WARNING: Failed to convert {modelFile}: {e}")
+
+		# Copy face_diff.bin if present and not empty
+		if faceDiffBinFilename is not None:
+			faceDiffBin = open(faceDiffBinFilename, 'rb').read()
+			if not faceDiffFileIsEmpty(faceDiffBin):
+				shutil.copy(faceDiffBinFilename, os.path.join(facesFolder, "face_diff.bin"))
+
+		# Create face.fpk.xml
+		fpkXml = os.path.join(facesFolder, "face.fpk.xml")
+		with open(fpkXml, 'w', encoding='utf-8') as f:
+			f.write('<?xml version="1.0"?>\n')
+			f.write('<ArchiveFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="FpkFile" Name="face.fpk" FpkType="Fpk">\n')
+			f.write('  <Entries>\n')
+
+			# Add face_diff.bin if it exists
+			if faceDiffBinFilename is not None:
+				faceDiffBin = open(faceDiffBinFilename, 'rb').read()
+				if not faceDiffFileIsEmpty(faceDiffBin):
+					f.write('    <Entry FilePath="face_diff.bin" />\n')
+
+			# Add all face .fmdl files
+			for modelFile in faceModels:
+				baseName = os.path.basename(modelFile)[:-6]
+				f.write(f'    <Entry FilePath="{baseName}.fmdl" />\n')
+
+			f.write('  </Entries>\n')
+			f.write('  <References />\n')
+			f.write('</ArchiveFile>\n')
+
+		# Copy texture files to faces folder
+		for texFile in allTextureFiles:
+			shutil.copy(texFile, os.path.join(facesFolder, os.path.basename(texFile)))
+
+	# Convert boots models if any exist
+	if len(bootsModels) > 0:
+		# Create Boots/XXX01 - PlayerName/ subfolder
+		bootsParentFolder = os.path.join(destinationDirectory, "Boots")
+		if not os.path.exists(bootsParentFolder):
+			os.makedirs(bootsParentFolder)
+
+		bootsFolder = os.path.join(bootsParentFolder, playerFolderName)
+		if not os.path.exists(bootsFolder):
+			os.makedirs(bootsFolder)
+
+		for modelFile in bootsModels:
+			baseName = os.path.basename(modelFile)[:-6]  # Remove .model
+			print("converting boots " + baseName)
+			try:
+				modelFileObj = model2fmdl.loadModel(modelFile)
+				outputFmdl = os.path.join(bootsFolder, f"{baseName}.fmdl")
+				model2fmdl.saveFmdl(model2fmdl.convertModel(modelFileObj), outputFmdl)
+			except Exception as e:
+				print(f"WARNING: Failed to convert {modelFile}: {e}")
+
+		# Copy boots.skl skeleton file
+		if bootsSklPath and os.path.exists(bootsSklPath):
+			shutil.copy(bootsSklPath, os.path.join(bootsFolder, "boots.skl"))
 		else:
-			modelType = 'parts'
-			modelSubtype = baseName
+			print("WARNING: boots.skl not found, boots folder may not work correctly")
 
-		suffixIndex = 0
-		while True:
-			if suffixIndex == 0:
-				suffixComponent = ""
-			else:
-				suffixComponent = "_%s" % suffixIndex
-				suffixIndex += 1
+		# Create boots.fpk.xml
+		fpkXml = os.path.join(bootsFolder, "boots.fpk.xml")
+		with open(fpkXml, 'w', encoding='utf-8') as f:
+			f.write('<?xml version="1.0"?>\n')
+			f.write('<ArchiveFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="FpkFile" Name="boots.fpk" FpkType="Fpk">\n')
+			f.write('  <Entries>\n')
+			f.write('    <Entry FilePath="boots.skl" />\n')
 
-			if modelSubtype is None:
-				subtypeComponent = ""
-			else:
-				subtypeComponent = "_%s" % modelSubtype
+			# Add all boots .fmdl files
+			for modelFile in bootsModels:
+				baseName = os.path.basename(modelFile)[:-6]
+				f.write(f'    <Entry FilePath="{baseName}.fmdl" />\n')
 
-			typeComponent = modelType.replace("_", "").lower()
+			f.write('  </Entries>\n')
+			f.write('  <References />\n')
+			f.write('</ArchiveFile>\n')
 
-			modelFilename = "%s%s%s.model" % (typeComponent, subtypeComponent, suffixComponent)
-			modelPath = os.path.join(destinationDirectory, modelFilename)
-			if not os.path.exists(modelPath):
-				break
+		# Copy texture files to boots folder
+		for texFile in allTextureFiles:
+			shutil.copy(texFile, os.path.join(bootsFolder, os.path.basename(texFile)))
 
-		modelFile = fmdl2model.convertFmdl(fmdlFile, fmdlMeshMaterialNames)
-		fmdl2model.saveModel(modelFile, modelPath)
+	# Convert glove models if any exist
+	if len(gloveModels) > 0:
+		# Create Gloves/XXX01 - PlayerName/ subfolder
+		glovesParentFolder = os.path.join(destinationDirectory, "Gloves")
+		if not os.path.exists(glovesParentFolder):
+			os.makedirs(glovesParentFolder)
 
-	if faceDiffBinFilename is not None:
-		faceDiffBin = open(faceDiffBinFilename, 'rb').read()
-		if not faceDiffFileIsEmpty(faceDiffBin):
-			open(os.path.join(destinationDirectory, "face_diff.bin"), 'wb').write(faceDiffBin)
+		glovesFolder = os.path.join(glovesParentFolder, playerFolderName)
+		if not os.path.exists(glovesFolder):
+			os.makedirs(glovesFolder)
+
+		for modelFile in gloveModels:
+			baseName = os.path.basename(modelFile)[:-6]  # Remove .model
+			try:
+				modelFileObj = model2fmdl.loadModel(modelFile)
+				outputFmdl = os.path.join(glovesFolder, f"{baseName}.fmdl")
+				model2fmdl.saveFmdl(model2fmdl.convertModel(modelFileObj), outputFmdl)
+			except Exception as e:
+				print(f"WARNING: Failed to convert {modelFile}: {e}")
+
+		# Create glove.fpk.xml
+		fpkXml = os.path.join(glovesFolder, "glove.fpk.xml")
+		with open(fpkXml, 'w', encoding='utf-8') as f:
+			f.write('<?xml version="1.0"?>\n')
+			f.write('<ArchiveFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="FpkFile" Name="glove.fpk" FpkType="Fpk">\n')
+			f.write('  <Entries>\n')
+
+			# Add all glove .fmdl files
+			for modelFile in gloveModels:
+				baseName = os.path.basename(modelFile)[:-6]
+				f.write(f'    <Entry FilePath="{baseName}.fmdl" />\n')
+
+			f.write('  </Entries>\n')
+			f.write('  <References />\n')
+			f.write('</ArchiveFile>\n')
+
+		# Copy texture files to gloves folder
+		for texFile in allTextureFiles:
+			shutil.copy(texFile, os.path.join(glovesFolder, os.path.basename(texFile)))
+
+	# Copy portrait to Portraits folder if it exists
+	if portraitFilename is not None:
+		portraitsFolder = os.path.join(destinationDirectory, "Portraits")
+		if not os.path.exists(portraitsFolder):
+			os.makedirs(portraitsFolder)
+		shutil.copy(portraitFilename, os.path.join(portraitsFolder, os.path.basename(portraitFilename)))
 
 
 if __name__ == "__main__":

@@ -33,6 +33,26 @@ class ModelMaterial:
 	def __hash__(self):
 		return id(self)
 
+class FmdlMaterial:
+	def __init__(self, name, shader, technique, textures, parameters):
+		self.name = name
+		self.shader = shader
+		self.technique = technique
+		self.textures = textures
+		self.parameters = parameters
+
+	def __eq__(self, other):
+		return (
+			    self.name == other.name
+			and self.shader == other.shader
+			and self.technique == other.technique
+			and self.textures == other.textures
+			and self.parameters == other.parameters
+		)
+
+	def __hash__(self):
+		return id(self)
+
 def run(command):
 	result = subprocess.run(command, capture_output = True, text = True)
 	return result.stdout
@@ -663,3 +683,50 @@ def buildMaterials(fmdls, destinationDirectory, commonDestinationDirectory):
 		meshMaterialNames[mesh] = materialName
 	
 	return (materialsFile, meshMaterialNames)
+
+
+def buildFmdlMaterial(mesh, modelFilename, sourceDirectory, faceDirectory, commonDirectory):
+	return FmdlMaterial(
+		"fox3DFW_ConstantSRGB_NDR_Solid",
+		"fox3dfw_constant_srgb_ndr_solid",
+		{},
+		{},
+	)
+
+
+def buildFmdlMaterials(models, destinationDirectory, commonDestinationDirectory):
+	class MaterialSource:
+		def __init__(self, mesh, modelFilename):
+			self.mesh = mesh
+			self.modelFilename = modelFilename
+
+	meshMaterials = {}
+	materialSources = {}
+
+	#
+	# Build a FmdlMaterial for each mesh
+	#
+	for (modelFilename, modelDirectory, model) in models:
+		for mesh in model.meshes:
+			material = buildFmdlMaterial(mesh, modelFilename, modelDirectory, destinationDirectory, commonDestinationDirectory)
+			meshMaterials[mesh] = material
+			materialSources[material] = MaterialSource(mesh, modelFilename)
+
+
+	meshMaterialNames = {}
+	for mesh, material in meshMaterials.items():
+		if material is None:
+			continue
+
+		if type(material) == str:
+			materialName = material
+		else:
+			if material in equivalentMaterials:
+				equivalentMaterial = equivalentMaterials[material]
+			else:
+				equivalentMaterial = material
+			materialName = materialNames[equivalentMaterial]
+
+		meshMaterialNames[mesh] = materialName
+
+	return meshMaterialNames

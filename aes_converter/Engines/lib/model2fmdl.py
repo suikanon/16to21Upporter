@@ -1,4 +1,6 @@
 import numpy
+import os
+import xml.etree.ElementTree as ET
 from . import FmdlAntiBlur, FmdlFile, FmdlMeshSplitting, FmdlSplitVertexEncoding
 from . import ModelFile, ModelMeshSplitting, ModelSplitVertexEncoding
 from . import PesSkeletonData, Skeleton
@@ -16,11 +18,11 @@ def convertMesh(modelMesh, modelFmdlBones):
         modelBoneIndices[modelBone] = fmdlMesh.boneGroup.bones.index(fmdlBone)
 
     fmdlMesh.vertexFields = FmdlFile.FmdlFile.VertexFields()
-    fmdlMesh.vertexFields.hasNormal = fmdlMesh.vertexFields.hasNormal
-    fmdlMesh.vertexFields.hasTangent = fmdlMesh.vertexFields.hasTangent
+    fmdlMesh.vertexFields.hasNormal = modelMesh.vertexFields.hasNormal
+    fmdlMesh.vertexFields.hasTangent = modelMesh.vertexFields.hasTangent
     fmdlMesh.vertexFields.hasBitangent = False
     fmdlMesh.vertexFields.hasColor = False
-    fmdlMesh.vertexFields.hasBoneMapping = fmdlMesh.vertexFields.hasBoneMapping
+    fmdlMesh.vertexFields.hasBoneMapping = modelMesh.vertexFields.hasBoneMapping
     uvMapsToInclude = []
     for i in range(fmdlMesh.vertexFields.uvCount):
         # if i not in fmdlMesh.vertexFields.uvEqualities or fmdlMesh.vertexFields.uvEqualities[i] >= i:
@@ -110,10 +112,10 @@ def convertBones(modelBones):
     bonesToCreate = []
     modelBoneNames = {}
     for modelBone in modelBones:
-        boneName = modelBones.name
+        boneName = modelBone.name
         if boneName not in bonesToCreate:
             bonesToCreate.append(boneName)
-        modelBoneNames[modelBones] = boneName
+        modelBoneNames[modelBone] = boneName
 
     fmdlBones = []
     fmdlBonesByName = {}
@@ -125,24 +127,126 @@ def convertBones(modelBones):
             matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]
 
         fmdlBone = FmdlFile.FmdlFile.Bone(boneName, matrix)
+        fmdlBone.name = boneName
         fmdlBones.append(fmdlBone)
         fmdlBonesByName[boneName] = fmdlBone
 
     return fmdlBones, {modelBone: fmdlBonesByName[name] for modelBone, name in modelBoneNames.items()}
 
 
-def convertMaterials(model, sourceDirectory) :
+def convertMaterials(model, sourceDirectory):
+    """
+    Convert materials from ModelFile format to FmdlFile MaterialInstance format.
+
+    Args:
+        model: ModelFile object containing materials
+        sourceDirectory: Path to directory containing .model file and .mtl files
+
+    Returns:
+        List of FmdlFile.MaterialInstance objects
+    """
     materialInstances = []
+    print("0")
+    # Find all .mtl files in the source directory
+    mtlFiles = []
+    if os.path.isdir(sourceDirectory):
+        for filename in os.listdir(sourceDirectory):
+            if filename.lower().endswith('.mtl'):
+                mtlFiles.append(os.path.join(sourceDirectory, filename))
 
+    print("1")
+    # Parse all .mtl files to build a material database
+    mtlMaterials = {}  # name -> material XML element
+    for mtlFile in mtlFiles:
+        try:
+            tree = ET.parse(mtlFile)
+            root = tree.getroot()
 
+            # Find all <material> elements
+            for materialElement in root.findall('material'):
+                print("name")
+                print(materialElement)
+                materialName = materialElement.get('name')
+                print(materialName)
+                if materialName:
+                    mtlMaterials[materialName] = materialElement
+        except Exception as e:
+            print(f"WARNING: Failed to parse .mtl file {mtlFile}: {e}")
+
+    print("2")
+    # Process each material from the ModelFile
+    for materialName in model.materials:
+        materialInstance = FmdlFile.FmdlFile.MaterialInstance()
+        materialInstance.name = materialName
+
+        print(materialName)
+        # Check if material exists in .mtl files
+        if materialName in mtlMaterials:
+            materialElement = mtlMaterials[materialName]
+            shader = materialElement.get('shader', '')
+
+            # Assign technique and shader based on shader type
+            if shader == 'Basic_C':
+                materialInstance.technique = 'fox3DDF_Blin'
+                materialInstance.shader = 'fox3ddf_blin'
+            else:
+                materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR'
+                materialInstance.shader = 'fox3dfw_constant_srgb_ndr'
+
+            # Find DiffuseMap sampler
+            diffuseMapSampler = None
+            for samplerElement in materialElement.findall('sampler'):
+                if samplerElement.get('name') == 'DiffuseMap':
+                    diffuseMapSampler = samplerElement
+                    break
+
+            if diffuseMapSampler is not None:
+                texturePath = diffuseMapSampler.get('path', '')
+
+                # Create FmdlTexture object
+                texture = FmdlFile.FmdlFile.Texture()
+
+                # Extract filename from path (remove ./ prefix if present)
+                if texturePath.startswith('./'):
+                    texturePath = texturePath[2:]
+
+                texture.filename = os.path.basename(texturePath)
+
+                # Determine directory based on model type
+                # Check if this is a face model or boots model
+                if 'face' in materialName.lower() or 'hair' in materialName.lower() or 'oral' in materialName.lower():
+                    texture.directory = '/Assets/pes16/model/character/face/real/75314/sourceimages/'
+                else:
+                    texture.directory = '/Assets/pes16/model/character/boots/k0051/'
+
+                # Add texture to materialInstance with 'Base_Tex_SRGB' key
+                materialInstance.textures = [('Base_Tex_SRGB', texture)]
+            else:
+                materialInstance.textures = []
+        else:
+            # Material not found in .mtl file, use default values
+            print(f"WARNING: Material '{materialName}' not found in .mtl files, using defaults")
+            materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR'
+            materialInstance.shader = 'fox3dfw_constant_srgb_ndr'
+            materialInstance.textures = []
+
+        # Parameters field is left empty as per requirements
+        materialInstance.parameters = []
+
+        materialInstances.append(materialInstance)
     return materialInstances
 
 
-def convertModel(model, sourceDirectory, modelMeshMaterialNames):
+def convertModel(model, sourceDirectory):
+    print("preamp")
     fmdlFile = FmdlFile.FmdlFile()
-    fmdlFile.bones, modelFmdlBones = convertBones(model.bones)
+    print(model.bones)
+    #fmdlFile.bones, modelFmdlBones = convertBones(model.bones)
+    print("convertModel")
+    print(sourceDirectory)
+    fmdlFile.init()
     fmdlFile.materialInstances = convertMaterials(model, sourceDirectory)
-    fmdlFile.meshes = convertMeshes(model, modelMeshMaterialNames, modelFmdlBones)
+    fmdlFile.meshes = convertMeshes(model, ["name"], modelFmdlBones)
 
     if len(fmdlFile.meshes) == 0:
         fmdlFile.boundingBox = FmdlFile.FmdlFile.BoundingBox(

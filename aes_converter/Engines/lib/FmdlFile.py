@@ -791,19 +791,7 @@ class FmdlFile:
 			materialInstance.shader = instanceShader
 			materialInstance.textures = instanceTextures
 			materialInstance.parameters = instanceMaterialParameters
-			print(materialInstance)
-			print(materialInstance.name)
-			print(materialInstance.technique)
-			print(materialInstance.shader)
-			print(materialInstance.textures)
-			for mat in materialInstance.textures:
-				print(mat[1].filename)
-				print(mat[1].directory)
-			print(materialInstance.parameters)
 			materialInstances.append(materialInstance)
-		print("material instances")
-		print(materialInstances)
-		print("printed material isntances")
 		return materialInstances
 	
 	@staticmethod
@@ -1294,7 +1282,6 @@ class FmdlFile:
 		fmdl.readFile(filename)
 		
 		(strings, extensionHeaders) = self.parseStrings(fmdl)
-		print(strings)
 		boundingBoxes = self.parseBoundingBoxes(fmdl)
 		bones = self.parseBones(fmdl, strings, boundingBoxes)
 		materialInstances = self.parseMaterialInstances(fmdl, strings)
@@ -1307,7 +1294,22 @@ class FmdlFile:
 		self.meshGroups = meshGroups
 		self.extensionHeaders = extensionHeaders
 	
-	
+
+	def init(self):
+		fmdl = FmdlContainer()
+		fmdl.readFile('Engines/lib/dummy.fmdl')
+
+		(strings, extensionHeaders) = self.parseStrings(fmdl)
+		boundingBoxes = self.parseBoundingBoxes(fmdl)
+		bones = self.parseBones(fmdl, strings, boundingBoxes)
+
+		self.bones = bones
+
+	def defaultBoundingBoxes(self):
+		fmdl = FmdlContainer()
+		fmdl.readFile('Engines/lib/dummy.fmdl')
+
+		return self.parseBoundingBoxes(fmdl)
 	
 	@staticmethod
 	def newSegment0BlockDescriptorID(fmdl, blockID):

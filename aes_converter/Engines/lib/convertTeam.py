@@ -425,11 +425,8 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
             print("ERROR: Player %s not found in pes16 save" % destinationPlayerId)
 
         sourcePlayer = sourcePlayers[sourcePlayerId]
-        print("source player")
-        print(sourcePlayer)
         oldDestinationPlayer = oldDestinationPlayers[destinationPlayerId]
 
-        print(oldDestinationPlayer)
         (oldDestinationPlayerData, oldDestinationPlayerAestheticsData) = oldDestinationPlayer
         if oldDestinationPlayerData is None or oldDestinationPlayerAestheticsData is None:
             print("ERROR: Incomplete player %s found in pes16 save" % destinationPlayerId)

@@ -603,7 +603,6 @@ class FmdlFile:
 			return []
 		
 		boneGroups = FmdlFile.parseBoneGroups(fmdl, bones)
-		levelsOfDetail = FmdlFile.parseLevelsOfDetail(fmdl)
 		faceIndices = FmdlFile.parseFaceIndices(fmdl)
 		bufferOffsets = FmdlFile.parseBufferOffsets(fmdl)
 		meshFormats = FmdlFile.parseMeshFormatAssignments(fmdl, bufferOffsets)

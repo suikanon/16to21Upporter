@@ -6,284 +6,487 @@ from . import ModelFile, ModelMeshSplitting, ModelSplitVertexEncoding
 from . import PesSkeletonData, Skeleton
 
 
-def convertMesh(modelMesh, modelFmdlBones):
-    fmdlMesh = FmdlFile.FmdlFile.Mesh()
+def convertMeshGeometry(modelMesh, modelFmdlBones):
+	"""
+	Convert ModelFile mesh geometry to FMDL format.
+	ModelFile already has vertices and faces, just need format conversion.
+	"""
+	fmdlVertices = []
+	modelFmdlVertices = {}  # For face conversion
 
-    fmdlMesh.boneGroup = FmdlFile.FmdlFile.BoneGroup()
-    modelBoneIndices = {}
-    for modelBone in modelMesh.boneGroup.bones:
-        fmdlBone = modelFmdlBones[modelBone]
-        if fmdlBone not in fmdlMesh.boneGroup.bones:
-            fmdlMesh.boneGroup.bones.append(fmdlBone)
-        modelBoneIndices[modelBone] = fmdlMesh.boneGroup.bones.index(fmdlBone)
+	for modelVertex in modelMesh.vertices:
+		fmdlVertex = FmdlFile.FmdlFile.Vertex()
 
-    fmdlMesh.vertexFields = FmdlFile.FmdlFile.VertexFields()
-    fmdlMesh.vertexFields.hasNormal = modelMesh.vertexFields.hasNormal
-    fmdlMesh.vertexFields.hasTangent = modelMesh.vertexFields.hasTangent
-    fmdlMesh.vertexFields.hasBitangent = False
-    fmdlMesh.vertexFields.hasColor = False
-    fmdlMesh.vertexFields.hasBoneMapping = modelMesh.vertexFields.hasBoneMapping
-    uvMapsToInclude = []
-    for i in range(fmdlMesh.vertexFields.uvCount):
-        # if i not in fmdlMesh.vertexFields.uvEqualities or fmdlMesh.vertexFields.uvEqualities[i] >= i:
-        uvMapsToInclude.append(i)
-        fmdlMesh.vertexFields.uvCount += 1
+		# Position (already Vector3)
+		fmdlVertex.position = modelVertex.position
 
-    modelFmdlPositions = {}
-    modelFmdlVertices = {}
-    fmdlMesh.vertices = []
-    for modelVertex in fmdlMesh.vertices:
-        fmdlVertex = FmdlFile.FmdlFile.Vertex()
+		# Normal (convert to Vector4)
+		if modelMesh.vertexFields.hasNormal:
+			fmdlVertex.normal = FmdlFile.FmdlFile.Vector4(
+				modelVertex.normal.x,
+				modelVertex.normal.y,
+				modelVertex.normal.z,
+				1.0
+			)
 
-        if modelVertex.position in modelFmdlPositions:
-            fmdlVertex.position = modelFmdlPositions[modelVertex.position]
-        else:
-            fmdlVertex.position = FmdlFile.FmdlFile.Vector3(modelVertex.position.x, modelVertex.position.y,
-                                                               modelVertex.position.z)
-            modelFmdlPositions[modelVertex.position] = fmdlVertex.position
+		# Tangent (convert to Vector4)
+		if modelMesh.vertexFields.hasTangent:
+			fmdlVertex.tangent = FmdlFile.FmdlFile.Vector4(
+				modelVertex.tangent.x,
+				modelVertex.tangent.y,
+				modelVertex.tangent.z,
+				1.0
+			)
 
-        if fmdlMesh.vertexFields.hasNormal:
-            fmdlVertex.normal = FmdlFile.FmdlFile.Vector3(modelVertex.normal.x, modelVertex.normal.y,
-                                                             modelVertex.normal.z)
-        if fmdlMesh.vertexFields.hasTangent:
-            fmdlVertex.tangent = FmdlFile.FmdlFile.Vector3(modelVertex.tangent.x, modelVertex.tangent.y,
-                                                              modelVertex.tangent.z)
+		# UV maps (already Vector2 list)
+		fmdlVertex.uv = [uv for uv in modelVertex.uv]
 
-        for uvMap in uvMapsToInclude:
-            fmdlVertex.uv.append(FmdlFile.FmdlFile.Vector2(modelVertex.uv[uvMap].u, modelVertex.uv[uvMap].v))
+		# Color (if present)
+		if modelMesh.vertexFields.hasColor:
+			fmdlVertex.color = modelVertex.color
 
-        if fmdlMesh.vertexFields.hasBoneMapping:
-            fmdlVertex.boneMapping = {}
-            for (bone, weight) in modelVertex.boneMapping.items():
-                boneIndex = modelBoneIndices[bone]
-                if boneIndex not in fmdlVertex.boneMapping:
-                    fmdlVertex.boneMapping[boneIndex] = 0
-                fmdlVertex.boneMapping[boneIndex] += weight
+		# Bone mapping (convert bone references) FIX
+		if modelMesh.vertexFields.hasBoneMapping:
+			fmdlVertex.boneMapping = {}
+			print("bone mapping")
+			print(modelVertex.boneMapping.items())
+			print(modelFmdlBones)
+			for (modelBone, weight) in modelVertex.boneMapping.items():
+				fmdlBone = modelFmdlBones[modelBone]
+				fmdlVertex.boneMapping[fmdlBone] = weight
 
-        fmdlMesh.vertices.append(fmdlVertex)
-        modelFmdlVertices[modelVertex] = fmdlVertex
+		fmdlVertices.append(fmdlVertex)
+		modelFmdlVertices[modelVertex] = fmdlVertex
 
-    fmdlMesh.faces = []
-    for modelFace in modelMesh.faces:
-        modelMesh.faces.append(
-            FmdlFile.FmdlFile.Face(*reversed([modelFmdlVertices[modelVertex] for modelVertex in modelFace.vertices])))
+	# Convert faces
+	fmdlFaces = []
+	for modelFace in modelMesh.faces:
+		fmdlFaces.append(FmdlFile.FmdlFile.Face(
+			modelFmdlVertices[modelFace.vertices[0]],
+			modelFmdlVertices[modelFace.vertices[1]],
+			modelFmdlVertices[modelFace.vertices[2]]
+		))
 
-    if len(fmdlMesh.vertices) == 0:
-        fmdlMesh.boundingBox = FmdlFile.FmdlFile.BoundingBox(
-            FmdlFile.FmdlFile.Vector3(0, 0, 0),
-            FmdlFile.FmdlFile.Vector3(0, 0, 0),
-        )
-    else:
-        fmdlMesh.boundingBox = FmdlFile.FmdlFile.BoundingBox(
-            FmdlFile.FmdlFile.Vector3(
-                min(vertex.position.x for vertex in fmdlMesh.vertices),
-                min(vertex.position.y for vertex in fmdlMesh.vertices),
-                min(vertex.position.z for vertex in fmdlMesh.vertices),
-            ),
-            FmdlFile.FmdlFile.Vector3(
-                max(vertex.position.x for vertex in fmdlMesh.vertices),
-                max(vertex.position.y for vertex in fmdlMesh.vertices),
-                max(vertex.position.z for vertex in fmdlMesh.vertices),
-            ),
-        )
-
-    return fmdlMesh
+	return (fmdlVertices, fmdlFaces)
 
 
-def convertMeshes(model, modelMeshMaterialNames, modelFmdlBones):
-    fmdlMeshes = []
-    for modelMesh in model.meshes:
-        if modelMesh not in modelMeshMaterialNames:
-            continue
+def convertMesh(modelMesh, modelFmdlBones, materialInstances):
+	"""
+	Convert a single ModelFile mesh to FMDL mesh.
+	"""
+	fmdlMesh = FmdlFile.FmdlFile.Mesh()
 
-        fmdlMesh = convertMesh(fmdlMesh, modelFmdlBones)
-        fmdlMesh.material = modelMeshMaterialNames[modelMesh]
+	# Copy vertex fields
+	fmdlMesh.vertexFields = FmdlFile.FmdlFile.VertexFields()
+	fmdlMesh.vertexFields.hasNormal = modelMesh.vertexFields.hasNormal
+	fmdlMesh.vertexFields.hasTangent = modelMesh.vertexFields.hasTangent
+	fmdlMesh.vertexFields.hasBitangent = False
+	fmdlMesh.vertexFields.hasColor = modelMesh.vertexFields.hasColor if hasattr(modelMesh.vertexFields, 'hasColor') else False
+	fmdlMesh.vertexFields.hasBoneMapping = modelMesh.vertexFields.hasBoneMapping
+	fmdlMesh.vertexFields.uvCount = modelMesh.vertexFields.uvCount if hasattr(modelMesh.vertexFields, 'uvCount') else 1
+	fmdlMesh.vertexFields.highPrecisionUv = False
 
-        for fmdlMeshGroup in model.meshGroups:
-            if fmdlMesh in fmdlMeshGroup.meshes:
-                fmdlMesh.name = fmdlMeshGroup.name
+	# Convert geometry
+	(fmdlMesh.vertices, fmdlMesh.faces) = convertMeshGeometry(modelMesh, modelFmdlBones)
 
-        fmdlMeshes.append(fmdlMesh)
+	# Set up bone group
+	fmdlMesh.boneGroup = FmdlFile.FmdlFile.BoneGroup()
+	if hasattr(modelMesh, 'boneGroup') and modelMesh.boneGroup:
+		fmdlMesh.boneGroup.bones = [
+			modelFmdlBones[modelBone] for modelBone in modelMesh.boneGroup.bones
+		]
 
-    return fmdlMeshes
+	# Find matching material instance
+	materialName = modelMesh.material if hasattr(modelMesh, 'material') else None
+	fmdlMesh.materialInstance = None
+	if materialName:
+		for matInstance in materialInstances:
+			if matInstance.name == materialName:
+				fmdlMesh.materialInstance = matInstance
+				break
+
+	# If no material found, use first material or None
+	if fmdlMesh.materialInstance is None and len(materialInstances) > 0:
+		fmdlMesh.materialInstance = materialInstances[0]
+
+	# Default alpha/shadow flags
+	fmdlMesh.alphaFlags = 0
+	fmdlMesh.shadowFlags = 1
+
+	# Calculate bounding box
+	if len(fmdlMesh.vertices) > 0:
+		fmdlMesh.boundingBox = FmdlFile.FmdlFile.BoundingBox(
+			FmdlFile.FmdlFile.Vector4(
+				min(v.position.x for v in fmdlMesh.vertices),
+				min(v.position.y for v in fmdlMesh.vertices),
+				min(v.position.z for v in fmdlMesh.vertices),
+				1.0
+			),
+			FmdlFile.FmdlFile.Vector4(
+				max(v.position.x for v in fmdlMesh.vertices),
+				max(v.position.y for v in fmdlMesh.vertices),
+				max(v.position.z for v in fmdlMesh.vertices),
+				1.0
+			)
+		)
+	else:
+		fmdlMesh.boundingBox = FmdlFile.FmdlFile.BoundingBox(
+			FmdlFile.FmdlFile.Vector4(0, 0, 0, 1.0),
+			FmdlFile.FmdlFile.Vector4(0, 0, 0, 1.0),
+		)
+
+	return fmdlMesh
+
+
+def convertMeshes(model, modelFmdlBones, materialInstances):
+	"""Convert all meshes from ModelFile to FMDL format."""
+	fmdlMeshes = []
+	print("converting meshes")
+	for modelMesh in model.meshes:
+		print(modelMesh)
+		fmdlMesh = convertMesh(modelMesh, modelFmdlBones, materialInstances)
+		fmdlMeshes.append(fmdlMesh)
+
+	return fmdlMeshes
 
 
 def convertBones(modelBones):
-    bonesToCreate = []
-    modelBoneNames = {}
-    for modelBone in modelBones:
-        boneName = modelBone.name
-        if boneName not in bonesToCreate:
-            bonesToCreate.append(boneName)
-        modelBoneNames[modelBone] = boneName
+	"""
+	Convert bones from ModelFile format to FMDL format.
+	Sets up bone hierarchy with parent relationships.
+	"""
+	bonesToCreate = []
+	modelBoneNames = {}
 
-    fmdlBones = []
-    fmdlBonesByName = {}
-    for boneName in bonesToCreate:
-        if boneName in PesSkeletonData.bones:
-            numpyMatrix = numpy.linalg.inv(Skeleton.pesToNumpy(PesSkeletonData.bones[boneName].matrix))
-            matrix = [v for row in numpyMatrix for v in row][0:12]
-        else:
-            matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]
+	for modelBone in modelBones:
+		boneName = modelBone.name
+		if boneName not in bonesToCreate:
+			bonesToCreate.append(boneName)
+		modelBoneNames[modelBone] = boneName
 
-        fmdlBone = FmdlFile.FmdlFile.Bone(boneName, matrix)
-        fmdlBone.name = boneName
-        fmdlBones.append(fmdlBone)
-        fmdlBonesByName[boneName] = fmdlBone
+	fmdlBones = []
+	fmdlBonesByName = {}
 
-    return fmdlBones, {modelBone: fmdlBonesByName[name] for modelBone, name in modelBoneNames.items()}
+	for boneName in bonesToCreate:
+		fmdlBone = FmdlFile.FmdlFile.Bone()
+		fmdlBone.name = boneName
+		fmdlBone.children = []
+
+		# Get skeleton data
+		if boneName in PesSkeletonData.bones:
+			pesBone = PesSkeletonData.bones[boneName]
+			numpyMatrix = numpy.linalg.inv(Skeleton.pesToNumpy(pesBone.matrix))
+			matrix = [v for row in numpyMatrix for v in row][0:12]
+
+			# Set positions
+			(x, y, z) = pesBone.startPosition
+			fmdlBone.globalPosition = FmdlFile.FmdlFile.Vector4(x, y, z, 1.0)
+			fmdlBone.localPosition = FmdlFile.FmdlFile.Vector4(0.0, 0.0, 0.0, 0.0)
+		else:
+			matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]
+			fmdlBone.globalPosition = FmdlFile.FmdlFile.Vector4(0.0, 0.0, 0.0, 1.0)
+			fmdlBone.localPosition = FmdlFile.FmdlFile.Vector4(0.0, 0.0, 0.0, 0.0)
+
+		fmdlBone.matrix = matrix
+		fmdlBone.parent = None
+		fmdlBones.append(fmdlBone)
+		fmdlBonesByName[boneName] = fmdlBone
+
+	# Set parent relationships
+	for fmdlBone in fmdlBones:
+		if fmdlBone.name in PesSkeletonData.bones:
+			parentName = PesSkeletonData.bones[fmdlBone.name].sklParent
+			if parentName and parentName in fmdlBonesByName:
+				fmdlBone.parent = fmdlBonesByName[parentName]
+				fmdlBone.parent.children.append(fmdlBone)
+
+	return fmdlBones, {modelBone: fmdlBonesByName[name] for modelBone, name in modelBoneNames.items()}
 
 
 def convertMaterials(model, sourceDirectory):
-    """
-    Convert materials from ModelFile format to FmdlFile MaterialInstance format.
+	"""
+	Convert materials from ModelFile format to FmdlFile MaterialInstance format.
 
-    Args:
-        model: ModelFile object containing materials
-        sourceDirectory: Path to directory containing .model file and .mtl files
+	Args:
+		model: ModelFile object containing materials
+		sourceDirectory: Path to directory containing .model file and .mtl files
 
-    Returns:
-        List of FmdlFile.MaterialInstance objects
-    """
-    materialInstances = []
-    print("0")
-    # Find all .mtl files in the source directory
-    mtlFiles = []
-    if os.path.isdir(sourceDirectory):
-        for filename in os.listdir(sourceDirectory):
-            if filename.lower().endswith('.mtl'):
-                mtlFiles.append(os.path.join(sourceDirectory, filename))
+	Returns:
+		List of FmdlFile.MaterialInstance objects
+	"""
+	materialInstances = []
 
-    print("1")
-    # Parse all .mtl files to build a material database
-    mtlMaterials = {}  # name -> material XML element
-    for mtlFile in mtlFiles:
-        try:
-            tree = ET.parse(mtlFile)
-            root = tree.getroot()
+	# Find all .mtl files in the source directory
+	mtlFiles = []
+	if os.path.isdir(sourceDirectory):
+		for filename in os.listdir(sourceDirectory):
+			if filename.lower().endswith('.mtl'):
+				mtlFiles.append(os.path.join(sourceDirectory, filename))
 
-            # Find all <material> elements
-            for materialElement in root.findall('material'):
-                print("name")
-                print(materialElement)
-                materialName = materialElement.get('name')
-                print(materialName)
-                if materialName:
-                    mtlMaterials[materialName] = materialElement
-        except Exception as e:
-            print(f"WARNING: Failed to parse .mtl file {mtlFile}: {e}")
+	# Parse all .mtl files to build a material database
+	mtlMaterials = {}  # name -> material XML element
+	for mtlFile in mtlFiles:
+		try:
+			tree = ET.parse(mtlFile)
+			root = tree.getroot()
 
-    print("2")
-    # Process each material from the ModelFile
-    for materialName in model.materials:
-        materialInstance = FmdlFile.FmdlFile.MaterialInstance()
-        materialInstance.name = materialName
+			# Find all <material> elements
+			for materialElement in root.findall('material'):
+				materialName = materialElement.get('name')
+				if materialName:
+					mtlMaterials[materialName] = materialElement
+		except Exception as e:
+			print(f"WARNING: Failed to parse .mtl file {mtlFile}: {e}")
 
-        print(materialName)
-        # Check if material exists in .mtl files
-        if materialName in mtlMaterials:
-            materialElement = mtlMaterials[materialName]
-            shader = materialElement.get('shader', '')
+	# Process each material from the ModelFile
+	for materialName in model.materials:
+		materialInstance = FmdlFile.FmdlFile.MaterialInstance()
+		materialInstance.name = materialName
 
-            # Assign technique and shader based on shader type
-            if shader == 'Basic_C':
-                materialInstance.technique = 'fox3DDF_Blin'
-                materialInstance.shader = 'fox3ddf_blin'
-            else:
-                materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR'
-                materialInstance.shader = 'fox3dfw_constant_srgb_ndr'
+		# Check if material exists in .mtl files
+		if materialName in mtlMaterials:
+			materialElement = mtlMaterials[materialName]
+			shader = materialElement.get('shader', '')
 
-            # Find DiffuseMap sampler
-            diffuseMapSampler = None
-            for samplerElement in materialElement.findall('sampler'):
-                if samplerElement.get('name') == 'DiffuseMap':
-                    diffuseMapSampler = samplerElement
-                    break
+			# Assign technique and shader based on shader type
+			if shader == 'Basic_C':
+				materialInstance.technique = 'fox3DDF_Blin'
+				materialInstance.shader = 'fox3ddf_blin'
+			else:
+				materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR'
+				materialInstance.shader = 'fox3dfw_constant_srgb_ndr'
 
-            if diffuseMapSampler is not None:
-                texturePath = diffuseMapSampler.get('path', '')
+			# Find DiffuseMap sampler
+			diffuseMapSampler = None
+			for samplerElement in materialElement.findall('sampler'):
+				if samplerElement.get('name') == 'DiffuseMap':
+					diffuseMapSampler = samplerElement
+					break
 
-                # Create FmdlTexture object
-                texture = FmdlFile.FmdlFile.Texture()
+			if diffuseMapSampler is not None:
+				texturePath = diffuseMapSampler.get('path', '')
 
-                # Extract filename from path (remove ./ prefix if present)
-                if texturePath.startswith('./'):
-                    texturePath = texturePath[2:]
+				# Create FmdlTexture object
+				texture = FmdlFile.FmdlFile.Texture()
 
-                texture.filename = os.path.basename(texturePath)
+				# Extract filename from path (remove ./ prefix if present)
+				if texturePath.startswith('./'):
+					texturePath = texturePath[2:]
 
-                # Determine directory based on model type
-                # Check if this is a face model or boots model
-                if 'face' in materialName.lower() or 'hair' in materialName.lower() or 'oral' in materialName.lower():
-                    texture.directory = '/Assets/pes16/model/character/face/real/75314/sourceimages/'
-                else:
-                    texture.directory = '/Assets/pes16/model/character/boots/k0051/'
+				texture.filename = os.path.basename(texturePath)
 
-                # Add texture to materialInstance with 'Base_Tex_SRGB' key
-                materialInstance.textures = [('Base_Tex_SRGB', texture)]
-            else:
-                materialInstance.textures = []
-        else:
-            # Material not found in .mtl file, use default values
-            print(f"WARNING: Material '{materialName}' not found in .mtl files, using defaults")
-            materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR'
-            materialInstance.shader = 'fox3dfw_constant_srgb_ndr'
-            materialInstance.textures = []
+				# Determine directory based on model type
+				# Check if this is a face model or boots model
+				if 'face' in materialName.lower() or 'hair' in materialName.lower() or 'oral' in materialName.lower():
+					texture.directory = '/Assets/pes16/model/character/face/real/75314/sourceimages/'
+				else:
+					texture.directory = '/Assets/pes16/model/character/boots/k0051/'
 
-        # Parameters field is left empty as per requirements
-        materialInstance.parameters = []
+				# Add texture to materialInstance with 'Base_Tex_SRGB' key
+				materialInstance.textures = [('Base_Tex_SRGB', texture)]
+			else:
+				materialInstance.textures = []
+		else:
+			# Material not found in .mtl file, use default values
+			print(f"WARNING: Material '{materialName}' not found in .mtl files, using defaults")
+			materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR'
+			materialInstance.shader = 'fox3dfw_constant_srgb_ndr'
+			materialInstance.textures = []
 
-        materialInstances.append(materialInstance)
-    return materialInstances
+		# Parameters field is left empty as per requirements
+		materialInstance.parameters = []
+
+		materialInstances.append(materialInstance)
+
+	return materialInstances
+
+
+def createMeshGroups(model, fmdlMeshes):
+	"""
+	Create simple mesh groups - one per mesh.
+	If ModelFile has mesh group info, use it; otherwise create flat structure.
+	"""
+	meshGroups = []
+
+	if hasattr(model, 'meshGroups') and model.meshGroups:
+		# Use existing mesh groups
+		for i, modelMeshGroup in enumerate(model.meshGroups):
+			meshGroup = FmdlFile.FmdlFile.MeshGroup()
+			meshGroup.name = modelMeshGroup.name if hasattr(modelMeshGroup, 'name') else f"group_{i}"
+			meshGroup.visible = True
+			meshGroup.parent = None
+			meshGroup.children = []
+			# Assign meshes based on index (simplified)
+			if i < len(fmdlMeshes):
+				meshGroup.meshes = [fmdlMeshes[i]]
+			else:
+				meshGroup.meshes = []
+			meshGroups.append(meshGroup)
+	else:
+		# Create one group per mesh
+		for i, mesh in enumerate(fmdlMeshes):
+			meshGroup = FmdlFile.FmdlFile.MeshGroup()
+			meshGroup.name = f"mesh_{i}"
+			meshGroup.visible = True
+			meshGroup.parent = None
+			meshGroup.children = []
+			meshGroup.meshes = [mesh]
+			meshGroups.append(meshGroup)
+
+	return meshGroups
+
+
+def calculateBoneBoundingBoxes(bones, meshes):
+	"""Calculate bounding box for each bone based on influenced vertices."""
+	boneVertexPositions = {bone: [] for bone in bones}
+
+	for mesh in meshes:
+		if not mesh.vertexFields.hasBoneMapping:
+			continue
+
+		for vertex in mesh.vertices:
+			for bone in vertex.boneMapping:
+				boneVertexPositions[bone].append(vertex.position)
+
+	for bone in bones:
+		vertexPositions = boneVertexPositions[bone]
+		if len(vertexPositions) == 0:
+			bone.boundingBox = FmdlFile.FmdlFile.BoundingBox(
+				FmdlFile.FmdlFile.Vector4(0.0, 0.0, 0.0, 1.0),
+				FmdlFile.FmdlFile.Vector4(0.0, 0.0, 0.0, 1.0)
+			)
+		else:
+			bone.boundingBox = FmdlFile.FmdlFile.BoundingBox(
+				FmdlFile.FmdlFile.Vector4(
+					min(p.x for p in vertexPositions),
+					min(p.y for p in vertexPositions),
+					min(p.z for p in vertexPositions),
+					1.0
+				),
+				FmdlFile.FmdlFile.Vector4(
+					max(p.x for p in vertexPositions),
+					max(p.y for p in vertexPositions),
+					max(p.z for p in vertexPositions),
+					1.0
+				)
+			)
+
+
+def calculateMeshBoundingBox(mesh):
+	"""Calculate bounding box from mesh vertices."""
+	if len(mesh.vertices) == 0:
+		return None
+
+	return FmdlFile.FmdlFile.BoundingBox(
+		FmdlFile.FmdlFile.Vector4(
+			min(v.position.x for v in mesh.vertices),
+			min(v.position.y for v in mesh.vertices),
+			min(v.position.z for v in mesh.vertices),
+			1.0
+		),
+		FmdlFile.FmdlFile.Vector4(
+			max(v.position.x for v in mesh.vertices),
+			max(v.position.y for v in mesh.vertices),
+			max(v.position.z for v in mesh.vertices),
+			1.0
+		)
+	)
+
+
+def calculateMeshGroupBoundingBox(meshGroup):
+	"""Recursively calculate mesh group bounding box."""
+	boundingBoxes = []
+
+	# Collect from meshes
+	for mesh in meshGroup.meshes:
+		bbox = calculateMeshBoundingBox(mesh)
+		if bbox:
+			boundingBoxes.append(bbox)
+
+	# Collect from children
+	for child in meshGroup.children:
+		bbox = calculateMeshGroupBoundingBox(child)
+		if bbox:
+			boundingBoxes.append(bbox)
+
+	if len(boundingBoxes) == 0:
+		meshGroup.boundingBox = FmdlFile.FmdlFile.BoundingBox(
+			FmdlFile.FmdlFile.Vector4(0.0, 0.0, 0.0, 1.0),
+			FmdlFile.FmdlFile.Vector4(0.0, 0.0, 0.0, 1.0)
+		)
+		return None
+
+	meshGroup.boundingBox = FmdlFile.FmdlFile.BoundingBox(
+		FmdlFile.FmdlFile.Vector4(
+			min(box.min.x for box in boundingBoxes),
+			min(box.min.y for box in boundingBoxes),
+			min(box.min.z for box in boundingBoxes),
+			1.0
+		),
+		FmdlFile.FmdlFile.Vector4(
+			max(box.max.x for box in boundingBoxes),
+			max(box.max.y for box in boundingBoxes),
+			max(box.max.z for box in boundingBoxes),
+			1.0
+		)
+	)
+
+	return meshGroup.boundingBox
+
+
+def calculateBoundingBoxes(meshGroups, bones, meshes):
+	"""Calculate all bounding boxes."""
+	calculateBoneBoundingBoxes(bones, meshes)
+
+	for meshGroup in meshGroups:
+		if meshGroup.parent is None:  # Only process root groups
+			calculateMeshGroupBoundingBox(meshGroup)
 
 
 def convertModel(model, sourceDirectory):
-    print("preamp")
-    fmdlFile = FmdlFile.FmdlFile()
-    print(model.bones)
-    #fmdlFile.bones, modelFmdlBones = convertBones(model.bones)
-    print("convertModel")
-    print(sourceDirectory)
-    fmdlFile.init()
-    fmdlFile.materialInstances = convertMaterials(model, sourceDirectory)
-    fmdlFile.meshes = convertMeshes(model, ["name"], modelFmdlBones)
+	"""Convert ModelFile to FmdlFile."""
+	fmdlFile = FmdlFile.FmdlFile()
+	print("converting model")
+	# 1. Materials
+	materialInstances = convertMaterials(model, sourceDirectory)
+	fmdlFile.materialInstances = materialInstances
 
-    if len(fmdlFile.meshes) == 0:
-        fmdlFile.boundingBox = FmdlFile.FmdlFile.BoundingBox(
-            FmdlFile.FmdlFile.Vector3(0, 0, 0),
-            FmdlFile.FmdlFile.Vector3(0, 0, 0),
-        )
-    else:
-        fmdlFile.boundingBox = FmdlFile.FmdlFile.BoundingBox(
-            FmdlFile.FmdlFile.Vector3(
-                min(mesh.boundingBox.min.x for mesh in fmdlFile.meshes),
-                min(mesh.boundingBox.min.y for mesh in fmdlFile.meshes),
-                min(mesh.boundingBox.min.z for mesh in fmdlFile.meshes),
-            ),
-            FmdlFile.FmdlFile.Vector3(
-                max(mesh.boundingBox.max.x for mesh in fmdlFile.meshes),
-                max(mesh.boundingBox.max.y for mesh in fmdlFile.meshes),
-                max(mesh.boundingBox.max.z for mesh in fmdlFile.meshes),
-            ),
-        )
+	# 2. Bones
+	fmdlFile.bones, modelFmdlBones = convertBones(model.bones)
+	print("bones")
+	print(fmdlFile.bones)
+	# 3. Meshes
+	fmdlFile.meshes = convertMeshes(model, modelFmdlBones, materialInstances)
+	print("meshes")
+	print(fmdlFile.meshes)
 
+	# 4. Mesh Groups
+	fmdlFile.meshGroups = createMeshGroups(model, fmdlFile.meshes)
+	print("meshGroups")
+	print(fmdlFile.meshGroups)
 
-    return fmdlFile
+	# 5. Bounding Boxes
+	calculateBoundingBoxes(fmdlFile.meshGroups, fmdlFile.bones, fmdlFile.meshes)
+	print("Boxes")
+	print(fmdlFile.meshes)
+
+	return fmdlFile
 
 
 def loadModel(filename):
-    #modelFile = ModelFile.ModelFile()
-    modelFile = ModelFile.readModelFile(filename, ModelFile.ParserSettings())[0]
+	"""Load a ModelFile from disk."""
+	modelFile = ModelFile.readModelFile(filename, ModelFile.ParserSettings())[0]
 
-    modelFile = ModelMeshSplitting.decodeModelSplitMeshes(modelFile)
-    modelFile = ModelSplitVertexEncoding.decodeModelVertexLoopPreservation(modelFile)
+	modelFile = ModelMeshSplitting.decodeModelSplitMeshes(modelFile)
+	modelFile = ModelSplitVertexEncoding.decodeModelVertexLoopPreservation(modelFile)
 
-    return modelFile
+	return modelFile
 
 
 def saveFmdl(fmdlFile, filename):
-    fmdlFile = FmdlSplitVertexEncoding.encodeFmdlVertexLoopPreservation(fmdlFile)
-    fmdlFile = FmdlMeshSplitting.encodeFmdlSplitMeshes(fmdlFile)
-    fmdlFile = FmdlAntiBlur.encodeModelAntiBlur(fmdlFile)
+	"""Save an FmdlFile to disk with encoding."""
+	fmdlFile = FmdlSplitVertexEncoding.encodeFmdlVertexLoopPreservation(fmdlFile)
+	fmdlFile = FmdlMeshSplitting.encodeFmdlSplitMeshes(fmdlFile)
+	fmdlFile = FmdlAntiBlur.encodeFmdlAntiBlur(fmdlFile)
 
-    FmdlFile.writeFmdlFile(fmdlFile, filename)
+	FmdlFile.FmdlFile.writeFile(fmdlFile, filename)

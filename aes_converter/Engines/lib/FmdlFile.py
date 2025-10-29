@@ -869,8 +869,7 @@ class FmdlFile:
 			if not techniqueStringID < len(strings):
 				raise InvalidFmdl("Invalid string ID %d referenced by material" % techniqueStringID)
 			materials.append((strings[techniqueStringID], strings[shaderStringID]))
-		print("materials")
-		print(materials)
+
 		return materials
 	
 	@staticmethod
@@ -1243,7 +1242,7 @@ class FmdlFile:
 							# WARNING
 							#raise InvalidFmdl("Invalid bone ID %d referenced by vertex" % boneIndices[i])
 							continue
-						
+						print(boneGroup.bones[boneIndices[i]])
 						vertex.boneMapping[boneGroup.bones[boneIndices[i]]] = boneWeights[i] / 255.0
 						vertexEncoding.boneMapping.append((boneGroup.bones[boneIndices[i]], boneWeights[i]))
 			

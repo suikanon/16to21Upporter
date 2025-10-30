@@ -148,12 +148,15 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			baseName = os.path.basename(modelFile)[:-6].lower()  # Remove .model extension
 
 			# Categorize by type based on filename
-			if 'face' in baseName or 'hair' in baseName or 'oral' in baseName:
+			if 'face' in baseName or 'hair' in baseName:
+				print("adding face")
 				faceModels.append(modelFile)
-			elif 'glove_l' in baseName or 'glove_r' in baseName:
+			elif 'glove' in baseName or 'hand' in baseName:
+				print("adding glove")
 				gloveModels.append(modelFile)
 			else:
 				# Everything else goes to boots (parts/uniform)
+				print("adding boots")
 				bootsModels.append(modelFile)
 
 		# Look for face_diff.bin
@@ -193,7 +196,7 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 				print(modelFile)
 				print(os.path.dirname(modelFile))
 				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(modelFile))
-				print("saving model")
+				print("saving face model")
 				model2fmdl.saveFmdl(fmdl, outputFmdl)
 			except Exception as e:
 				print(f"WARNING: Failed to convert {modelFile}: {e}")
@@ -247,7 +250,9 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			try:
 				modelFileObj = model2fmdl.loadModel(modelFile)
 				outputFmdl = os.path.join(bootsFolder, f"{baseName}.fmdl")
-				model2fmdl.saveFmdl(model2fmdl.convertModel(modelFileObj), outputFmdl)
+				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(modelFile))
+				print("saving boots model")
+				model2fmdl.saveFmdl(fmdl, outputFmdl)
 			except Exception as e:
 				print(f"WARNING: Failed to convert {modelFile}: {e}")
 
@@ -294,7 +299,9 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			try:
 				modelFileObj = model2fmdl.loadModel(modelFile)
 				outputFmdl = os.path.join(glovesFolder, f"{baseName}.fmdl")
-				model2fmdl.saveFmdl(model2fmdl.convertModel(modelFileObj), outputFmdl)
+				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(modelFile))
+				print("saving glove model")
+				model2fmdl.saveFmdl(fmdl, outputFmdl)
 			except Exception as e:
 				print(f"WARNING: Failed to convert {modelFile}: {e}")
 

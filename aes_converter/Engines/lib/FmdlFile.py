@@ -1434,21 +1434,23 @@ class FmdlFile:
 	
 	@staticmethod
 	def addMaterialInstance(fmdl, stringIndices, materialInstance):
+
 		nameStringID = FmdlFile.addString(fmdl, stringIndices, materialInstance.name)
+
 		materialID = FmdlFile.addMaterial(fmdl, stringIndices, materialInstance.shader, materialInstance.technique)
-		
+
 		firstTextureAssignmentID = FmdlFile.newSegment0BlockDescriptorID(fmdl, 7)
 		textureCount = len(materialInstance.textures)
 		for (role, texture) in materialInstance.textures:
 			textureID = FmdlFile.addTexture(fmdl, stringIndices, texture.filename, texture.directory)
 			FmdlFile.addTextureMaterialParameterAssignment(fmdl, stringIndices, role, textureID)
-		
+
 		firstMaterialParameterAssignmentID = FmdlFile.newSegment0BlockDescriptorID(fmdl, 7)
 		materialParameterCount = len(materialInstance.parameters)
 		for (parameter, values) in materialInstance.parameters:
 			materialParameterValuesID = FmdlFile.addMaterialParameterValues(fmdl, values)
 			FmdlFile.addTextureMaterialParameterAssignment(fmdl, stringIndices, parameter, materialParameterValuesID)
-		
+
 		return FmdlFile.addSegment0Block(fmdl, 4, pack('< H H H BB H H I',
 			nameStringID,
 			0, #padding
@@ -1941,11 +1943,19 @@ class FmdlFile:
 		fmdl = FmdlContainer()
 		
 		stringIndices = {}
+		print("addString")
 		self.addString(fmdl, stringIndices, '')
+		print("storeBones")
 		boneIndices = self.storeBones(fmdl, stringIndices, self.bones)
+		print("storeMaterialInstances")
+		print(stringIndices)
+		print(self.materialInstances)
 		materialInstanceIndices = self.storeMaterialInstances(fmdl, stringIndices, self.materialInstances)
+		print("storeMeshes")
 		meshIndices = self.storeMeshes(fmdl, self.meshes, boneIndices, materialInstanceIndices)
+		print("storeMeshGroups")
 		meshGroupIndices = self.storeMeshGroups(fmdl, stringIndices, self.meshGroups, meshIndices)
+		print("addExtensionHeaders")
 		self.addExtensionHeaders(fmdl, self, self.extensionHeaders, meshIndices, meshGroupIndices)
 		
 		# Unknown purpose
@@ -1963,5 +1973,6 @@ class FmdlFile:
 		if len(self.bones) > 0:
 			if 1 not in fmdl.segment1Blocks:
 				fmdl.segment1Blocks[1] = bytearray()
-		
+
+		print("writeFile")
 		fmdl.writeFile(filename)

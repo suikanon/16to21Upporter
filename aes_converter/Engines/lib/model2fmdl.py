@@ -45,13 +45,14 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
 		if modelMesh.vertexFields.hasColor:
 			fmdlVertex.color = modelVertex.color
 
-		# Bone mapping (convert bone references) FIX
+		# Bone mapping (convert bone references)
 		if modelMesh.vertexFields.hasBoneMapping:
 			fmdlVertex.boneMapping = {}
-			print("bone mapping")
-			print(modelVertex.boneMapping.items())
-			print(modelFmdlBones)
-			for (modelBone, weight) in modelVertex.boneMapping.items():
+
+			for (boneIndex, weight) in modelVertex.boneMapping.items():
+				# boneIndex is an integer - get the actual bone object from the mesh's bone group
+				modelBone = modelMesh.boneGroup.bones[boneIndex]
+				# Now use the bone object to look up the corresponding FMDL bone
 				fmdlBone = modelFmdlBones[modelBone]
 				fmdlVertex.boneMapping[fmdlBone] = weight
 
@@ -62,9 +63,9 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
 	fmdlFaces = []
 	for modelFace in modelMesh.faces:
 		fmdlFaces.append(FmdlFile.FmdlFile.Face(
-			modelFmdlVertices[modelFace.vertices[0]],
+			modelFmdlVertices[modelFace.vertices[2]],
 			modelFmdlVertices[modelFace.vertices[1]],
-			modelFmdlVertices[modelFace.vertices[2]]
+			modelFmdlVertices[modelFace.vertices[0]]
 		))
 
 	return (fmdlVertices, fmdlFaces)
@@ -141,9 +142,7 @@ def convertMesh(modelMesh, modelFmdlBones, materialInstances):
 def convertMeshes(model, modelFmdlBones, materialInstances):
 	"""Convert all meshes from ModelFile to FMDL format."""
 	fmdlMeshes = []
-	print("converting meshes")
 	for modelMesh in model.meshes:
-		print(modelMesh)
 		fmdlMesh = convertMesh(modelMesh, modelFmdlBones, materialInstances)
 		fmdlMeshes.append(fmdlMesh)
 
@@ -239,7 +238,8 @@ def convertMaterials(model, sourceDirectory):
 			print(f"WARNING: Failed to parse .mtl file {mtlFile}: {e}")
 
 	# Process each material from the ModelFile
-	for materialName in model.materials:
+	for materialKey in model.materials:
+		materialName = model.materials[materialKey]
 		materialInstance = FmdlFile.FmdlFile.MaterialInstance()
 		materialInstance.name = materialName
 
@@ -446,29 +446,22 @@ def calculateBoundingBoxes(meshGroups, bones, meshes):
 def convertModel(model, sourceDirectory):
 	"""Convert ModelFile to FmdlFile."""
 	fmdlFile = FmdlFile.FmdlFile()
-	print("converting model")
+
 	# 1. Materials
 	materialInstances = convertMaterials(model, sourceDirectory)
 	fmdlFile.materialInstances = materialInstances
 
 	# 2. Bones
 	fmdlFile.bones, modelFmdlBones = convertBones(model.bones)
-	print("bones")
-	print(fmdlFile.bones)
+
 	# 3. Meshes
 	fmdlFile.meshes = convertMeshes(model, modelFmdlBones, materialInstances)
-	print("meshes")
-	print(fmdlFile.meshes)
 
 	# 4. Mesh Groups
 	fmdlFile.meshGroups = createMeshGroups(model, fmdlFile.meshes)
-	print("meshGroups")
-	print(fmdlFile.meshGroups)
 
 	# 5. Bounding Boxes
 	calculateBoundingBoxes(fmdlFile.meshGroups, fmdlFile.bones, fmdlFile.meshes)
-	print("Boxes")
-	print(fmdlFile.meshes)
 
 	return fmdlFile
 

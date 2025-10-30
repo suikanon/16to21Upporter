@@ -417,7 +417,9 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
         sourcePlayer = sourcePlayers[sourcePlayerId]
         oldDestinationPlayer = oldDestinationPlayers[destinationPlayerId]
 
+        print("converting player")
         print(oldDestinationPlayer)
+        print(destinationDirectory)
         oldDestinationPlayerData = oldDestinationPlayer
         if oldDestinationPlayerData is None:
             print("ERROR: Incomplete player %s found in pes19 save" % destinationPlayerId)

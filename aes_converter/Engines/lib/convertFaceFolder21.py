@@ -135,7 +135,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 		playerFolderName = os.path.basename(sourceDirectories[0])
 
 	# Calculate boots/gloves ID and extract player name for k#### format
-	bootsGlovesFolderName = None
+	sharedBootsFolderName = None
+	sharedGlovesFolderName = None
 	if bootsGlovesBaseId is not None and relativePlayerId is not None:
 		bootsId = bootsGlovesBaseId + relativePlayerId
 		# Extract player name from playerFolderName (format: "XXX01 - PlayerName")
@@ -143,7 +144,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			playerName = playerFolderName.split(" - ", 1)[1]
 		else:
 			playerName = playerFolderName if playerFolderName else "Player"
-		bootsGlovesFolderName = f"k{bootsId:04d} - {playerName}"
+		sharedBootsFolderName = f"k{bootsId:04d} - {playerName}"
+		sharedGlovesFolderName = f"g{bootsId:04d} - {playerName}"
 
 	# Collect all .model files from all source directories
 	faceModels = []  # face_neck type models
@@ -258,7 +260,7 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			os.makedirs(bootsParentFolder)
 
 		# Use k#### format if bootsGlovesFolderName is available, otherwise use playerFolderName
-		bootsFolderName = bootsGlovesFolderName if bootsGlovesFolderName else playerFolderName
+		bootsFolderName = sharedBootsFolderName if sharedBootsFolderName else playerFolderName
 		bootsFolder = os.path.join(bootsParentFolder, bootsFolderName)
 		if not os.path.exists(bootsFolder):
 			os.makedirs(bootsFolder)
@@ -310,7 +312,7 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			os.makedirs(glovesParentFolder)
 
 		# Use k#### format if bootsGlovesFolderName is available, otherwise use playerFolderName
-		glovesFolderName = bootsGlovesFolderName if bootsGlovesFolderName else playerFolderName
+		glovesFolderName = sharedGlovesFolderName if sharedGlovesFolderName else playerFolderName
 		glovesFolder = os.path.join(glovesParentFolder, glovesFolderName)
 		if not os.path.exists(glovesFolder):
 			os.makedirs(glovesFolder)

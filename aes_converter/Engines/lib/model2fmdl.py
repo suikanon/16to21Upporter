@@ -466,6 +466,96 @@ def convertModel(model, sourceDirectory):
 	return fmdlFile
 
 
+def combineBootsModels(modelFiles, sourceDirectory):
+	"""
+	Combine multiple .model files into a single FMDL file (e.g., for boots).
+
+	This merges all meshes, materials, and mesh groups while deduplicating bones.
+
+	Args:
+	    modelFiles: List of .model file paths to combine
+	    sourceDirectory: Directory containing the models (for material lookup)
+
+	Returns:
+	    Combined FmdlFile object
+	"""
+	if len(modelFiles) == 0:
+		# No models to combine, return empty FMDL
+		return FmdlFile.FmdlFile()
+
+	if len(modelFiles) == 1:
+		# Only one model, just convert it normally
+		modelFileObj = loadModel(modelFiles[0])
+		return convertModel(modelFileObj, sourceDirectory)
+
+	# Step 1: Load and convert all models to FMDL
+	fmdlFiles = []
+	for modelFile in modelFiles:
+		modelFileObj = loadModel(modelFile)
+		fmdlFile = convertModel(modelFileObj, os.path.dirname(modelFile))
+		fmdlFiles.append(fmdlFile)
+
+	# Step 2: Create merged FMDL file
+	mergedFmdl = FmdlFile.FmdlFile()
+
+	# Step 3: Merge bones (avoid duplicates by name)
+	mergedBones = []
+	mergedBonesDict = {}  # boneName → bone object
+	boneMappings = []  # List of dicts: oldBone → mergedBone for each model
+
+	for fmdlFile in fmdlFiles:
+		boneMapping = {}
+		for bone in fmdlFile.bones:
+			if bone.name in mergedBonesDict:
+				# Bone already exists, reuse it
+				boneMapping[bone] = mergedBonesDict[bone.name]
+			else:
+				# New bone, add to merged list
+				mergedBones.append(bone)
+				mergedBonesDict[bone.name] = bone
+				boneMapping[bone] = bone
+		boneMappings.append(boneMapping)
+
+	mergedFmdl.bones = mergedBones
+
+	# Step 4: Merge material instances (keep all)
+	mergedFmdl.materialInstances = []
+	for fmdlFile in fmdlFiles:
+		mergedFmdl.materialInstances.extend(fmdlFile.materialInstances)
+
+	# Step 5: Merge meshes (update bone references)
+	mergedFmdl.meshes = []
+	for i, fmdlFile in enumerate(fmdlFiles):
+		boneMapping = boneMappings[i]
+		for mesh in fmdlFile.meshes:
+			# Update mesh bone group to reference merged bones
+			if hasattr(mesh, 'boneGroup') and mesh.boneGroup and hasattr(mesh.boneGroup, 'bones'):
+				mesh.boneGroup.bones = [
+					boneMapping[bone] for bone in mesh.boneGroup.bones
+				]
+
+			# Update vertex bone mappings
+			if mesh.vertexFields.hasBoneMapping:
+				for vertex in mesh.vertices:
+					if hasattr(vertex, 'boneMapping') and vertex.boneMapping:
+						newBoneMapping = {}
+						for bone, weight in vertex.boneMapping.items():
+							newBoneMapping[boneMapping[bone]] = weight
+						vertex.boneMapping = newBoneMapping
+
+			mergedFmdl.meshes.append(mesh)
+
+	# Step 6: Merge mesh groups
+	mergedFmdl.meshGroups = []
+	for fmdlFile in fmdlFiles:
+		mergedFmdl.meshGroups.extend(fmdlFile.meshGroups)
+
+	# Step 7: Recalculate bounding boxes
+	calculateBoundingBoxes(mergedFmdl.meshGroups, mergedFmdl.bones, mergedFmdl.meshes)
+
+	return mergedFmdl
+
+
 def loadModel(filename):
 	"""Load a ModelFile from disk."""
 	modelFile = ModelFile.readModelFile(filename, ModelFile.ParserSettings())[0]

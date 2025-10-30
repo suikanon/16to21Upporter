@@ -259,23 +259,27 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 		if not os.path.exists(bootsParentFolder):
 			os.makedirs(bootsParentFolder)
 
-		# Use k#### format if bootsGlovesFolderName is available, otherwise use playerFolderName
+		# Use k#### format if sharedBootsFolderName is available, otherwise use playerFolderName
 		bootsFolderName = sharedBootsFolderName if sharedBootsFolderName else playerFolderName
 		bootsFolder = os.path.join(bootsParentFolder, bootsFolderName)
 		if not os.path.exists(bootsFolder):
 			os.makedirs(bootsFolder)
 
-		for modelFile in bootsModels:
-			baseName = os.path.basename(modelFile)[:-6]  # Remove .model
-			print("converting boots " + baseName)
-			try:
-				modelFileObj = model2fmdl.loadModel(modelFile)
-				outputFmdl = os.path.join(bootsFolder, f"{baseName}.fmdl")
-				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(modelFile))
-				print("saving boots model")
-				model2fmdl.saveFmdl(fmdl, outputFmdl)
-			except Exception as e:
-				print(f"WARNING: Failed to convert {modelFile}: {e}")
+		# Combine multiple boots models into a single boots.fmdl
+		print(f"Converting {len(bootsModels)} boots model(s) into boots.fmdl")
+		try:
+			# Get the source directory (directory of first model file)
+			sourceDir = os.path.dirname(bootsModels[0]) if len(bootsModels) > 0 else ""
+
+			# Combine all boots models into one FMDL
+			combinedFmdl = model2fmdl.combineBootsModels(bootsModels, sourceDir)
+
+			# Save the combined boots.fmdl
+			outputFmdl = os.path.join(bootsFolder, "boots.fmdl")
+			print("Saving combined boots.fmdl")
+			model2fmdl.saveFmdl(combinedFmdl, outputFmdl)
+		except Exception as e:
+			print(f"WARNING: Failed to convert boots models: {e}")
 
 		# Copy boots.skl skeleton file
 		if bootsSklPath and os.path.exists(bootsSklPath):
@@ -290,12 +294,7 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			f.write('<ArchiveFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="FpkFile" Name="boots.fpk" FpkType="Fpk">\n')
 			f.write('  <Entries>\n')
 			f.write('    <Entry FilePath="boots.skl" />\n')
-
-			# Add all boots .fmdl files
-			for modelFile in bootsModels:
-				baseName = os.path.basename(modelFile)[:-6]
-				f.write(f'    <Entry FilePath="{baseName}.fmdl" />\n')
-
+			f.write('    <Entry FilePath="boots.fmdl" />\n')
 			f.write('  </Entries>\n')
 			f.write('  <References />\n')
 			f.write('</ArchiveFile>\n')

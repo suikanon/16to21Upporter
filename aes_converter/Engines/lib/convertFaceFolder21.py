@@ -117,7 +117,7 @@ def buildFmdlMaterials():
 	return
 
 
-def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestinationDirectory, bootsSklPath, playerFolderName=None):
+def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestinationDirectory, bootsSklPath, playerFolderName=None, bootsGlovesBaseId=None, relativePlayerId=None):
 	"""
 	Convert a PES16 face folder (unified face/boots/gloves) to PES21 format.
 
@@ -127,10 +127,23 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 	    commonDestinationDirectory: Path to common textures folder (unused for PES21)
 	    bootsSklPath: Path to the boots.skl skeleton file to copy to boots folders
 	    playerFolderName: Name to use for the player subfolders (e.g., "XXX01 - Snuffy")
+	    bootsGlovesBaseId: Base ID for calculating boots/gloves IDs (from team)
+	    relativePlayerId: Player number within team (1-23)
 	"""
 	# Determine folder name from the first source directory if not provided
 	if playerFolderName is None and len(sourceDirectories) > 0:
 		playerFolderName = os.path.basename(sourceDirectories[0])
+
+	# Calculate boots/gloves ID and extract player name for k#### format
+	bootsGlovesFolderName = None
+	if bootsGlovesBaseId is not None and relativePlayerId is not None:
+		bootsId = bootsGlovesBaseId + relativePlayerId
+		# Extract player name from playerFolderName (format: "XXX01 - PlayerName")
+		if playerFolderName and " - " in playerFolderName:
+			playerName = playerFolderName.split(" - ", 1)[1]
+		else:
+			playerName = playerFolderName if playerFolderName else "Player"
+		bootsGlovesFolderName = f"k{bootsId:04d} - {playerName}"
 
 	# Collect all .model files from all source directories
 	faceModels = []  # face_neck type models
@@ -233,14 +246,20 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 		for texFile in allTextureFiles:
 			shutil.copy(texFile, os.path.join(facesFolder, os.path.basename(texFile)))
 
+		# Copy portrait to this player's Faces folder if it exists
+		if portraitFilename is not None:
+			shutil.copy(portraitFilename, os.path.join(facesFolder, os.path.basename(portraitFilename)))
+
 	# Convert boots models if any exist
 	if len(bootsModels) > 0:
-		# Create Boots/XXX01 - PlayerName/ subfolder
+		# Create Boots/k#### - PlayerName/ subfolder
 		bootsParentFolder = os.path.join(destinationDirectory, "Boots")
 		if not os.path.exists(bootsParentFolder):
 			os.makedirs(bootsParentFolder)
 
-		bootsFolder = os.path.join(bootsParentFolder, playerFolderName)
+		# Use k#### format if bootsGlovesFolderName is available, otherwise use playerFolderName
+		bootsFolderName = bootsGlovesFolderName if bootsGlovesFolderName else playerFolderName
+		bootsFolder = os.path.join(bootsParentFolder, bootsFolderName)
 		if not os.path.exists(bootsFolder):
 			os.makedirs(bootsFolder)
 
@@ -285,12 +304,14 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 
 	# Convert glove models if any exist
 	if len(gloveModels) > 0:
-		# Create Gloves/XXX01 - PlayerName/ subfolder
+		# Create Gloves/k#### - PlayerName/ subfolder
 		glovesParentFolder = os.path.join(destinationDirectory, "Gloves")
 		if not os.path.exists(glovesParentFolder):
 			os.makedirs(glovesParentFolder)
 
-		glovesFolder = os.path.join(glovesParentFolder, playerFolderName)
+		# Use k#### format if bootsGlovesFolderName is available, otherwise use playerFolderName
+		glovesFolderName = bootsGlovesFolderName if bootsGlovesFolderName else playerFolderName
+		glovesFolder = os.path.join(glovesParentFolder, glovesFolderName)
 		if not os.path.exists(glovesFolder):
 			os.makedirs(glovesFolder)
 
@@ -324,13 +345,6 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 		# Copy texture files to gloves folder
 		for texFile in allTextureFiles:
 			shutil.copy(texFile, os.path.join(glovesFolder, os.path.basename(texFile)))
-
-	# Copy portrait to Portraits folder if it exists
-	if portraitFilename is not None:
-		portraitsFolder = os.path.join(destinationDirectory, "Portraits")
-		if not os.path.exists(portraitsFolder):
-			os.makedirs(portraitsFolder)
-		shutil.copy(portraitFilename, os.path.join(portraitsFolder, os.path.basename(portraitFilename)))
 
 
 if __name__ == "__main__":

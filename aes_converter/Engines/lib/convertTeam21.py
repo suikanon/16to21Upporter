@@ -176,9 +176,8 @@ def convertPlayer(sourceDirectory, destinationDirectory, relativePlayerId, boots
         else:
             print("  WARNING: No face folder found for player index %i (only %i folders available)" % (relativePlayerId, len(playerFolders)))
 
-    # Get boots.skl path from the example/template folder
-    # TODO move that file to lib
-    bootsSklPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "example_pes21", "numbers", "Boots", "k4226 - Cheeky Colon 3", "boots.skl")
+    # Get boots.skl path from the lib folder
+    bootsSklPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "boots.skl")
     if not os.path.exists(bootsSklPath):
         print("WARNING: boots.skl template not found at expected location")
         bootsSklPath = None
@@ -193,7 +192,8 @@ def convertPlayer(sourceDirectory, destinationDirectory, relativePlayerId, boots
         # Convert the unified PES16 face folder into separate PES21 Faces/Boots/Gloves folders
         #
         # Convert using convertFaceFolder which handles splitting into separate folders
-        convertFaceFolder([sourceFaceDirectory], destinationDirectory, commonDirectory, bootsSklPath)
+        convertFaceFolder([sourceFaceDirectory], destinationDirectory, commonDirectory, bootsSklPath,
+                         playerFolderName=None, bootsGlovesBaseId=bootsGlovesBaseId, relativePlayerId=relativePlayerId)
 
         # Check if face models were actually created (to determine hasFaceModel)
         facesFolder = ijoin(destinationDirectory, "Faces")
@@ -377,6 +377,29 @@ def convertTeamFiles(sourceDirectory, destinationDirectory):
                     convertKitTextureFile(kitTexturePath2, destinationKitTextureDirectory)
             else:
                 convertKitTextureFile(kitTexturePath, destinationKitTextureDirectory)
+
+    #
+    # Common
+    #
+    sourceCommonDirectory = ijoin(sourceDirectory, "Common")
+    if sourceCommonDirectory is not None:
+        destinationCommonDirectory = os.path.join(destinationDirectory, "Common")
+        # Create destination Common directory if it doesn't exist
+        if not os.path.exists(destinationCommonDirectory):
+            os.mkdir(destinationCommonDirectory)
+
+        # Copy all files from source Common to destination Common
+        for item in os.listdir(sourceCommonDirectory):
+            sourcePath = os.path.join(sourceCommonDirectory, item)
+            destinationPath = os.path.join(destinationCommonDirectory, item)
+
+            if os.path.isdir(sourcePath):
+                # Copy subdirectories recursively
+                if not os.path.exists(destinationPath):
+                    shutil.copytree(sourcePath, destinationPath)
+            else:
+                # Copy files
+                shutil.copy(sourcePath, destinationPath)
 
 
 def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):

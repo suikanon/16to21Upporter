@@ -25,99 +25,135 @@ def writeString(buffer, offset, string):
 
 
 #
-# Creates pes16 savedata for a player based on pes19 savedata.
+# Creates PES21 savedata for a player based on PES16 savedata.
 #
 def convertPlayerSaveData(sourcePlayerData, oldDestinationPlayerData, hasFaceModel, destinationBootsId,
                           destinationGlovesId):
-    (oldPlayerData, oldPlayerAestheticsData) = oldDestinationPlayerData
-    playerData = oldPlayerData[:]
-    aestheticsData = oldPlayerAestheticsData[:]
+    """
+    Convert PES16 player save data to PES21 format.
 
-    sourceAestheticsData = sourcePlayerData[116:]
+    PES16 format: (playerData: 112 bytes, aestheticsData: 72 bytes) tuple
+    PES21 format: single 312-byte playerData block
 
-    def readBits(byteOffset, bitOffset, bitCount):
+    Args:
+        sourcePlayerData: Tuple of (playerData, playerAestheticsData) from PES16 save
+        oldDestinationPlayerData: 312-byte playerData from PES21 save (template)
+        hasFaceModel: Whether this player has a custom face model
+        destinationBootsId: Boots ID to assign, or None to auto-assign
+        destinationGlovesId: Gloves ID to assign, or None to auto-assign
+
+    Returns:
+        312-byte bytearray of updated PES21 player data
+    """
+    # Start with a copy of the destination player data (PES21 format - 312 bytes)
+    playerData = bytearray(oldDestinationPlayerData)
+
+    # Extract source data (PES16 format)
+    (sourcePlayerData, sourceAestheticsData) = sourcePlayerData
+
+    # Helper functions for reading/writing bitfields
+    def readSourceBits(byteOffset, bitOffset, bitCount):
+        """Read bits from source PES16 aesthetics data"""
         (word32,) = struct.unpack('< I', sourceAestheticsData[byteOffset: byteOffset + 4])
         return (word32 >> bitOffset) & ((1 << bitCount) - 1)
 
     def writeBits(byteOffset, bitOffset, bitCount, value):
-        (word32,) = struct.unpack('< I', aestheticsData[byteOffset: byteOffset + 4])
+        """Write bits to destination PES21 player data"""
+        (word32,) = struct.unpack('< I', playerData[byteOffset: byteOffset + 4])
         # Mask the bits to be overwritten
         word32 = word32 & ~(((1 << bitCount) - 1) << bitOffset)
         # Add the new bits
         word32 = word32 | (value << bitOffset)
-        aestheticsData[byteOffset: byteOffset + 4] = struct.pack('< I', word32)
+        playerData[byteOffset: byteOffset + 4] = struct.pack('< I', word32)
 
     def cap(maximum, default, value):
+        """Cap a value to a maximum, returning default if exceeded"""
         if value > maximum:
             return default
         return value
 
-    writeString(playerData, 50, readString(sourcePlayerData, 52)[0:45])  # player name
-    writeString(playerData, 96, readString(sourcePlayerData, 98)[0:15])  # shirt name
+    # Copy basic player info
+    # Player name (PES16: offset 52, PES21: offset 54)
+    playerName = readString(sourcePlayerData, 52)
+    writeString(playerData, 54, playerName[0:45])
 
-    playerData[23] |= 128
-    # playerData[27] |= 128
+    # Shirt name (PES16: offset 98, PES21: offset 100)
+    shirtName = readString(sourcePlayerData, 98)
+    writeString(playerData, 100, shirtName[0:15])
 
-    aestheticsData[12: 19] = sourceAestheticsData[12: 19]  # body physique
-    aestheticsData[22: 72] = sourceAestheticsData[22: 72]  # ingame face
+    # Set edited flag
+    playerData[25] |= 128
 
-    bootsId = readBits(4, 4, 14)
-    glovesId = readBits(4, 18, 14)
+    # Copy body physique data (PES16 aesthetics[12:19] -> PES21 playerData[128:135])
+    playerData[128:135] = sourceAestheticsData[12:19]
 
+    # Copy ingame face data (PES16 aesthetics[22:72] -> PES21 playerData[138:188])
+    playerData[138:188] = sourceAestheticsData[22:72]
+
+    # Read source boots and gloves IDs from PES16 aesthetics data
+    sourceBootsId = readSourceBits(4, 4, 14)
+    sourceGlovesId = readSourceBits(4, 18, 14)
+
+    # Determine destination boots ID
     if destinationBootsId is not None:
-        pass
-    elif bootsId < 39:
-        destinationBootsId = 0
+        finalBootsId = destinationBootsId
+    elif sourceBootsId < 39:
+        finalBootsId = 0
     else:
-        destinationBootsId = 55
-    writeBits(4, 4, 14, destinationBootsId)
+        finalBootsId = 55
 
+    # Determine destination gloves ID
     if destinationGlovesId is not None:
-        pass
-    elif glovesId == 0:
-        destinationGlovesId = 0
-    elif glovesId < 11:
-        destinationGlovesId = glovesId
+        finalGlovesId = destinationGlovesId
+    elif sourceGlovesId == 0:
+        finalGlovesId = 0
+    elif sourceGlovesId < 11:
+        finalGlovesId = sourceGlovesId
     else:
-        destinationGlovesId = 11
-    writeBits(4, 18, 14, destinationGlovesId)
+        finalGlovesId = 11
 
+    # Write boots and gloves IDs to PES21 data (at offset 120, same bitfield layout)
+    writeBits(120, 4, 14, finalBootsId)
+    writeBits(120, 18, 14, finalGlovesId)
+
+    # Set edited bits flag (at offset 120)
     if hasFaceModel:
-        writeBits(4, 0, 4, 0x0c)  # edited bits
+        writeBits(120, 0, 4, 0x0c)  # custom face model
     else:
-        writeBits(4, 0, 4, 0x0f)  # edited bits
+        writeBits(120, 0, 4, 0x0f)  # ingame face
 
-    writeBits(8, 0, 32, 0)  # base copy id
-    writeBits(19, 0, 6, 0)  # wrist tape color
-    writeBits(19, 6, 2, 0)  # wrist tape enabled
-    writeBits(20, 0, 6, readBits(20, 0, 6))  # glasses
-    writeBits(20, 6, 2, readBits(20, 6, 2))  # sleeves
-    writeBits(21, 0, 2, readBits(21, 0, 2))  # inners
-    writeBits(21, 2, 2, readBits(21, 2, 2))  # socks
-    writeBits(21, 4, 2, readBits(21, 4, 2))  # undershorts
-    writeBits(21, 6, 1, readBits(21, 6, 1))  # shirttail
-    writeBits(21, 7, 1, 0)  # ankle taping
-    writeBits(22, 0, 4, 0)  # winter gloves
+    # Copy appearance settings
+    writeBits(124, 0, 32, 0)  # base copy id
+    writeBits(135, 0, 6, 0)  # wrist tape color
+    writeBits(135, 6, 2, 0)  # wrist tape enabled
+    writeBits(136, 0, 6, readSourceBits(20, 0, 6))  # glasses
+    writeBits(136, 6, 2, readSourceBits(20, 6, 2))  # sleeves
+    writeBits(137, 0, 2, readSourceBits(21, 0, 2))  # inners
+    writeBits(137, 2, 2, readSourceBits(21, 2, 2))  # socks
+    writeBits(137, 4, 2, readSourceBits(21, 4, 2))  # undershorts
+    writeBits(137, 6, 1, readSourceBits(21, 6, 1))  # shirttail
+    writeBits(137, 7, 1, 0)  # ankle taping
+    writeBits(138, 0, 4, 0)  # winter gloves
 
-    skinColor = readBits(45, 0, 3)
+    # Copy facial features with validation
+    skinColor = readSourceBits(45, 0, 3)
     if skinColor == 7:
-        # reset invisible skin
-        skinColor = 1
-    writeBits(45, 0, 3, skinColor)
+        skinColor = 1  # reset invisible skin
+    writeBits(161, 0, 3, skinColor)
 
-    writeBits(45, 3, 5, cap(3, 0, readBits(45, 3, 5)))  # cheek type
-    writeBits(46, 0, 3, cap(5, 0, readBits(46, 0, 3)))  # forehead type
-    writeBits(46, 3, 5, cap(12, 0, readBits(46, 3, 5)))  # facial hair type
-    writeBits(47, 0, 3, cap(4, 0, readBits(47, 0, 3)))  # laughter lines type
-    writeBits(47, 3, 3, cap(6, 0, readBits(47, 3, 3)))  # upper eyelid type
-    writeBits(48, 0, 3, cap(2, 0, readBits(48, 0, 3)))  # lower eyelid type
-    writeBits(50, 0, 3, cap(5, 0, readBits(50, 0, 3)))  # eyebrow type
-    writeBits(50, 5, 2, cap(2, 0, readBits(50, 5, 2)))  # neck line type
-    writeBits(52, 0, 3, cap(6, 0, readBits(52, 0, 3)))  # nose type
-    writeBits(53, 0, 3, cap(3, 0, readBits(53, 0, 3)))  # upper lip type
-    writeBits(53, 3, 3, cap(2, 0, readBits(53, 3, 3)))  # lower lip type
+    writeBits(161, 3, 5, cap(3, 0, readSourceBits(45, 3, 5)))  # cheek type
+    writeBits(162, 0, 3, cap(5, 0, readSourceBits(46, 0, 3)))  # forehead type
+    writeBits(162, 3, 5, cap(12, 0, readSourceBits(46, 3, 5)))  # facial hair type
+    writeBits(163, 0, 3, cap(4, 0, readSourceBits(47, 0, 3)))  # laughter lines type
+    writeBits(163, 3, 3, cap(6, 0, readSourceBits(47, 3, 3)))  # upper eyelid type
+    writeBits(164, 0, 3, cap(2, 0, readSourceBits(48, 0, 3)))  # lower eyelid type
+    writeBits(166, 0, 3, cap(5, 0, readSourceBits(50, 0, 3)))  # eyebrow type
+    writeBits(166, 5, 2, cap(2, 0, readSourceBits(50, 5, 2)))  # neck line type
+    writeBits(168, 0, 3, cap(6, 0, readSourceBits(52, 0, 3)))  # nose type
+    writeBits(169, 0, 3, cap(3, 0, readSourceBits(53, 0, 3)))  # upper lip type
+    writeBits(169, 3, 3, cap(2, 0, readSourceBits(53, 3, 3)))  # lower lip type
 
-    return (playerData, aestheticsData)
+    return playerData
 
 
 def mkdir(containingDirectory, name):
@@ -427,7 +463,7 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
     oldDestinationPlayers = save21.loadPlayers(destinationSave.payload)
     newDestinationPlayers = {}
 
-    for i in range(1):
+    for i in range(23):
         print("  Converting player %02i" % (i + 1))
         sourcePlayerId = sourceTeamId * 100 + i + 1
         destinationPlayerId = destinationTeamId * 100 + i + 1

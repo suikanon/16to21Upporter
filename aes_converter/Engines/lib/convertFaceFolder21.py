@@ -1,11 +1,92 @@
 import os
+import re
 import shutil
 import struct
 import sys
+from xml.etree import ElementTree
 
 from .util import ijoin, iglob
 from . import model2fmdl, material
 from . import FmdlFile, ModelFile
+
+
+def getTexturesUsedByModel(modelFile):
+	"""
+	Extract list of texture files used by a .model file.
+
+	This function:
+	1. Loads the .model file to get material names
+	2. Finds corresponding .mtl files in the same directory
+	3. Parses the .mtl XML to find texture paths in <sampler> elements
+	4. Returns a set of texture filenames to copy
+
+	Special handling for kit textures (u0XXXp0.dds pattern):
+	If a texture matches u0XXXp0.dds, includes all u0XXXpX.dds variants (X = 0-9)
+
+	Args:
+		modelFile: Path to the .model file
+
+	Returns:
+		Set of texture filenames (basenames only, no paths)
+	"""
+	texturesUsed = set()
+
+	try:
+		# Load the model to get material names
+		modelFileObj = ModelFile.readModelFile(modelFile, ModelFile.ParserSettings())[0]
+		materialNames = list(modelFileObj.materials.values())
+
+		# Find .mtl files in the same directory
+		sourceDir = os.path.dirname(modelFile)
+		mtlFiles = iglob(sourceDir, "*.mtl")
+		print("materialsstuufSSSSSSSSSSSSSSSSSSSSSSSSSS")
+		print(materialNames)
+		for mtlFile in mtlFiles:
+			try:
+				# Parse the MTL XML
+				tree = ElementTree.parse(mtlFile)
+				root = tree.getroot()
+
+				# Find all <material> elements with names matching our model's materials
+				for materialElement in root.findall('.//material'):
+					materialName = materialElement.get('name')
+					print(materialName)
+					# Skip if this material isn't used by our model
+					if materialName not in materialNames:
+						continue
+
+					# Extract texture paths from <sampler> elements
+					for samplerElement in materialElement.findall('.//sampler'):
+						texturePath = samplerElement.get('path')
+
+						if texturePath:
+							# Extract just the filename from the path
+							texturePath = texturePath.replace('\\', '/')
+							textureFilename = os.path.basename(texturePath)
+
+							# Check for kit texture pattern with optional prefix
+							# Pattern: [optional_prefix_]u0XXXp0.dds or [optional_prefix_]u0XXXg0.dds
+							# Examples: u0879p0.dds, bear_u0879p0.dds, kangaroo_u0879g0.dds
+							kitMatch = re.match(r'(.*)?(u0[0-9a-zA-Z]{3}[gp])0\.dds', textureFilename, re.IGNORECASE)
+							if kitMatch:
+								# Add all variants (u0XXXpX.dds where X = 0-9)
+								prefix = kitMatch.group(1) if kitMatch.group(1) else ''  # Optional prefix (e.g., "bear_")
+								kitBase = kitMatch.group(2)  # The u0XXXp or u0XXXg part
+								for digit in range(10):
+									variantFilename = f"{prefix}{kitBase}{digit}.dds"
+									texturesUsed.add(variantFilename)
+							else:
+								# Regular texture, add as-is
+								texturesUsed.add(textureFilename)
+
+			except Exception as e:
+				print(f"WARNING: Failed to parse MTL file {mtlFile}: {e}")
+				continue
+
+	except Exception as e:
+		print(f"WARNING: Failed to extract textures from {modelFile}: {e}")
+
+	return texturesUsed
 
 
 def convertBootsFolder(sourceDirectory, destinationDirectory, commonDestinationDirectory, bootsSklPath):
@@ -153,7 +234,6 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 	gloveModels = []  # gloveL/gloveR type models
 	faceDiffBinFilename = None
 	portraitFilename = None
-	allTextureFiles = []
 	hasFaceHighWin32Only = False  # Track if we only have face_high_win32.model (small size)
 	hairHighModel = None  # Track face_high_win32.model if size > 990 bytes
 
@@ -195,13 +275,6 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 		portraitFile = ijoin(directory, "portrait.dds")
 		if portraitFile is not None and portraitFilename is None:
 			portraitFilename = portraitFile
-
-		# Collect all texture files
-		for ext in ['*.dds', '*.ftex']:
-			textureFiles = iglob(directory, ext)
-			for texFile in textureFiles:
-				if 'portrait' not in os.path.basename(texFile).lower():
-					allTextureFiles.append(texFile)
 
 	# Check if we only have small face_high_win32.model (no other face models)
 	# We still need to create the Faces folder in this case
@@ -397,9 +470,37 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			f.write('  <References />\n')
 			f.write('</ArchiveFile>\n')
 
-		# Copy texture files to faces folder
-		for texFile in allTextureFiles:
-			shutil.copy(texFile, os.path.join(facesFolder, os.path.basename(texFile)))
+		# Collect textures used by face models
+		faceTexturesNeeded = set()
+
+		# Get textures from regular face models
+		for modelFile in faceModels:
+			textures = getTexturesUsedByModel(modelFile)
+			faceTexturesNeeded.update(textures)
+
+		# Get textures from hair_high model (large face_high_win32)
+		if hairHighModel is not None:
+			textures = getTexturesUsedByModel(hairHighModel)
+			faceTexturesNeeded.update(textures)
+
+		# Copy only the textures that are actually used
+		for directory in sourceDirectories:
+			for ext in ['*.dds', '*.ftex']:
+				textureFiles = iglob(directory, ext)
+				for texFile in textureFiles:
+					textureBasename = os.path.basename(texFile)
+					# Skip portrait file (handled separately below)
+					if 'portrait' in textureBasename.lower():
+						continue
+					# Check if this texture is needed by checking both .dds and .ftex extensions
+					textureName = textureBasename
+					if textureName.lower().endswith('.ftex'):
+						textureName = textureName[:-5] + '.dds'  # Check if .dds version is needed
+
+					if textureName in faceTexturesNeeded or textureBasename in faceTexturesNeeded:
+						destPath = os.path.join(facesFolder, textureBasename)
+						if not os.path.exists(destPath):  # Avoid duplicate copies
+							shutil.copy(texFile, destPath)
 
 		# Copy portrait to this player's Faces folder if it exists
 		if portraitFilename is not None:
@@ -452,9 +553,30 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			f.write('  <References />\n')
 			f.write('</ArchiveFile>\n')
 
-		# Copy texture files to boots folder
-		for texFile in allTextureFiles:
-			shutil.copy(texFile, os.path.join(bootsFolder, os.path.basename(texFile)))
+		# Collect textures used by boots models
+		bootsTexturesNeeded = set()
+		for modelFile in bootsModels:
+			textures = getTexturesUsedByModel(modelFile)
+			bootsTexturesNeeded.update(textures)
+
+		# Copy only the textures that are actually used
+		for directory in sourceDirectories:
+			for ext in ['*.dds', '*.ftex']:
+				textureFiles = iglob(directory, ext)
+				for texFile in textureFiles:
+					textureBasename = os.path.basename(texFile)
+					# Skip portrait file
+					if 'portrait' in textureBasename.lower():
+						continue
+					# Check if this texture is needed
+					textureName = textureBasename
+					if textureName.lower().endswith('.ftex'):
+						textureName = textureName[:-5] + '.dds'
+
+					if textureName in bootsTexturesNeeded or textureBasename in bootsTexturesNeeded:
+						destPath = os.path.join(bootsFolder, textureBasename)
+						if not os.path.exists(destPath):  # Avoid duplicate copies
+							shutil.copy(texFile, destPath)
 
 	# Convert glove models if any exist
 	if len(gloveModels) > 0:
@@ -512,9 +634,30 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			f.write('  <References />\n')
 			f.write('</ArchiveFile>\n')
 
-		# Copy texture files to gloves folder
-		for texFile in allTextureFiles:
-			shutil.copy(texFile, os.path.join(glovesFolder, os.path.basename(texFile)))
+		# Collect textures used by glove models
+		glovesTexturesNeeded = set()
+		for modelFile in gloveModels:
+			textures = getTexturesUsedByModel(modelFile)
+			glovesTexturesNeeded.update(textures)
+
+		# Copy only the textures that are actually used
+		for directory in sourceDirectories:
+			for ext in ['*.dds', '*.ftex']:
+				textureFiles = iglob(directory, ext)
+				for texFile in textureFiles:
+					textureBasename = os.path.basename(texFile)
+					# Skip portrait file
+					if 'portrait' in textureBasename.lower():
+						continue
+					# Check if this texture is needed
+					textureName = textureBasename
+					if textureName.lower().endswith('.ftex'):
+						textureName = textureName[:-5] + '.dds'
+
+					if textureName in glovesTexturesNeeded or textureBasename in glovesTexturesNeeded:
+						destPath = os.path.join(glovesFolder, textureBasename)
+						if not os.path.exists(destPath):  # Avoid duplicate copies
+							shutil.copy(texFile, destPath)
 
 
 if __name__ == "__main__":

@@ -223,8 +223,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 		if 'face_high_win32' in allFaceTypeModels and len(allFaceTypeModels) == 1:
 			hasFaceHighWin32Only = True
 
-	# Convert face models if any exist, OR if we have hair_high to convert, OR if we only have small face_high_win32.model
-	if len(faceModels) > 0 or hairHighModel is not None or hasFaceHighWin32Only:
+	# Convert face models if any exist, OR if we have hair_high to convert, OR if we only have small face_high_win32.model, OR if we have a portrait
+	if len(faceModels) > 0 or hairHighModel is not None or hasFaceHighWin32Only or portraitFilename is not None:
 		# Create Faces/XXX01 - PlayerName/ subfolder
 		facesParentFolder = os.path.join(destinationDirectory, "Faces")
 		if not os.path.exists(facesParentFolder):

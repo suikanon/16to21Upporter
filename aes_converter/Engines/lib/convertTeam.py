@@ -138,7 +138,7 @@ def mkdir(containingDirectory, name):
 def convertPlayer(sourceDirectory, destinationDirectory, relativePlayerId, bootsGlovesBaseId, sourcePlayerData,
                   oldDestinationPlayerData):
     (bootsGlovesIdData,) = struct.unpack('< I', sourcePlayerData[120: 124])
-    print(sourcePlayerData[120: 124])
+
     sourceBootsId = (bootsGlovesIdData >> 4) & ((1 << 14) - 1)
     sourceGlovesId = (bootsGlovesIdData >> 18) & ((1 << 14) - 1)
 

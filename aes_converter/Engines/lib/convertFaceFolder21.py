@@ -18,18 +18,21 @@ def getTexturesUsedByModel(modelFile):
 	1. Loads the .model file to get material names
 	2. Finds corresponding .mtl files in the same directory
 	3. Parses the .mtl XML to find texture paths in <sampler> elements
-	4. Returns a set of texture filenames to copy
+	4. For kit textures, searches the source directory for all matching variants
+	5. Returns a set of texture filenames that actually exist and should be copied
 
-	Special handling for kit textures (u0XXXp0.dds pattern):
-	If a texture matches u0XXXp0.dds, includes all u0XXXpX.dds variants (X = 0-9)
+	Special handling for kit textures (u0XXX[gp][0-9].dds pattern):
+	Kit textures are matched flexibly - any XXX value and any final digit (0-9)
+	Example: if .mtl has "number_u0870p0.dds", will match all "number_u0[any]p[0-9].dds" in the folder
 
 	Args:
 		modelFile: Path to the .model file
 
 	Returns:
-		Set of texture filenames (basenames only, no paths)
+		Set of texture filenames (basenames only, no paths) that exist in source directory
 	"""
 	texturesUsed = set()
+	sourceDir = os.path.dirname(modelFile)
 
 	try:
 		# Load the model to get material names
@@ -37,10 +40,7 @@ def getTexturesUsedByModel(modelFile):
 		materialNames = list(modelFileObj.materials.values())
 
 		# Find .mtl files in the same directory
-		sourceDir = os.path.dirname(modelFile)
 		mtlFiles = iglob(sourceDir, "*.mtl")
-		print("materialsstuufSSSSSSSSSSSSSSSSSSSSSSSSSS")
-		print(materialNames)
 		for mtlFile in mtlFiles:
 			try:
 				# Parse the MTL XML
@@ -50,7 +50,6 @@ def getTexturesUsedByModel(modelFile):
 				# Find all <material> elements with names matching our model's materials
 				for materialElement in root.findall('.//material'):
 					materialName = materialElement.get('name')
-					print(materialName)
 					# Skip if this material isn't used by our model
 					if materialName not in materialNames:
 						continue
@@ -58,23 +57,26 @@ def getTexturesUsedByModel(modelFile):
 					# Extract texture paths from <sampler> elements
 					for samplerElement in materialElement.findall('.//sampler'):
 						texturePath = samplerElement.get('path')
-
 						if texturePath:
 							# Extract just the filename from the path
 							texturePath = texturePath.replace('\\', '/')
 							textureFilename = os.path.basename(texturePath)
 
 							# Check for kit texture pattern with optional prefix
-							# Pattern: [optional_prefix_]u0XXXp0.dds or [optional_prefix_]u0XXXg0.dds
+							# Pattern: [optional_prefix_]u0XXX[gp][0-9].dds
 							# Examples: u0879p0.dds, bear_u0879p0.dds, kangaroo_u0879g0.dds
-							kitMatch = re.match(r'(.*)?(u0[0-9a-zA-Z]{3}[gp])0\.dds', textureFilename, re.IGNORECASE)
+							kitMatch = re.match(r'(.*?)(u0[0-9a-zA-Z]{3}([gp])[0-9])\.dds', textureFilename, re.IGNORECASE)
 							if kitMatch:
-								# Add all variants (u0XXXpX.dds where X = 0-9)
-								prefix = kitMatch.group(1) if kitMatch.group(1) else ''  # Optional prefix (e.g., "bear_")
-								kitBase = kitMatch.group(2)  # The u0XXXp or u0XXXg part
-								for digit in range(10):
-									variantFilename = f"{prefix}{kitBase}{digit}.dds"
-									texturesUsed.add(variantFilename)
+								# Extract prefix and type (p or g)
+								prefix = kitMatch.group(1) if kitMatch.group(1) else ''
+								kitType = kitMatch.group(3).lower()  # 'p' or 'g'
+
+								# Search source directory for all matching kit textures
+								# Pattern: prefix + u0 + any 3 chars + type + any digit + .dds
+								kitPattern = f"{prefix}u0*{kitType}[0-9].dds"
+								matchingTextures = iglob(sourceDir, kitPattern)
+								for texFile in matchingTextures:
+									texturesUsed.add(os.path.basename(texFile))
 							else:
 								# Regular texture, add as-is
 								texturesUsed.add(textureFilename)

@@ -490,9 +490,6 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
             oldDestinationPlayer,
         )
 
-        print("destination player ID")
-        print(destinationPlayerId)
-        print(newDestinationPlayers)
     print("  Converting kits")
     commonDirectory = ijoin(destinationDirectory, "Common")
     if commonDirectory is not None and len(os.listdir(commonDirectory)) == 0:

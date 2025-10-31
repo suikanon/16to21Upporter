@@ -234,34 +234,143 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 		if not os.path.exists(facesFolder):
 			os.makedirs(facesFolder)
 
-		# Convert all face models
-		for modelFile in faceModels:
-			baseName = os.path.basename(modelFile)[:-6]  # Remove .model
-			try:
-				modelFileObj = model2fmdl.loadModel(modelFile)
-				outputFmdl = os.path.join(facesFolder, f"{baseName}.fmdl")
-				print("converting model")
-				print(modelFile)
-				print(os.path.dirname(modelFile))
-				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(modelFile))
-				print("saving face model")
-				model2fmdl.saveFmdl(fmdl, outputFmdl)
-			except Exception as e:
-				print(f"WARNING: Failed to convert {modelFile}: {e}")
+		# Determine which face models to convert and what to name them
+		# Track converted files for face.fpk.xml
+		convertedFaceFiles = []
 
-		# Convert hair_high model if it exists (large face_high_win32.model)
+		# Handle large face_high_win32.model separately (always becomes hair_high.fmdl)
 		if hairHighModel is not None:
 			try:
 				modelFileObj = model2fmdl.loadModel(hairHighModel)
 				outputFmdl = os.path.join(facesFolder, "hair_high.fmdl")
 				print("converting face_high_win32.model to hair_high.fmdl")
-				print(hairHighModel)
-				print(os.path.dirname(hairHighModel))
 				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(hairHighModel))
 				print("saving hair_high.fmdl")
 				model2fmdl.saveFmdl(fmdl, outputFmdl)
+				convertedFaceFiles.append("hair_high.fmdl")
 			except Exception as e:
 				print(f"WARNING: Failed to convert hair_high model: {e}")
+
+		# Process regular face models with intelligent naming
+		if len(faceModels) == 1:
+			# Single model: always becomes face_high.fmdl
+			modelFile = faceModels[0]
+			baseName = os.path.basename(modelFile)[:-6]
+			try:
+				modelFileObj = model2fmdl.loadModel(modelFile)
+				outputFmdl = os.path.join(facesFolder, "face_high.fmdl")
+				print(f"converting {baseName}.model to face_high.fmdl")
+				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(modelFile))
+				print("saving face_high.fmdl")
+				model2fmdl.saveFmdl(fmdl, outputFmdl)
+				convertedFaceFiles.append("face_high.fmdl")
+			except Exception as e:
+				print(f"WARNING: Failed to convert {modelFile}: {e}")
+
+		elif len(faceModels) == 2:
+			# Two models: one becomes face_high.fmdl, the other hair_high.fmdl
+			# Prefer the one with "hair" in the name for hair_high.fmdl
+			hairModel = None
+			faceModel = None
+
+			for modelFile in faceModels:
+				baseName = os.path.basename(modelFile)[:-6].lower()
+				if 'hair' in baseName:
+					hairModel = modelFile
+				else:
+					faceModel = modelFile
+
+			# If neither has "hair" in the name, use file size to decide
+			if hairModel is None:
+				print("WARNING: Ambiguous face models - neither has 'hair' in filename, using smaller file as hair_high.fmdl")
+				sizes = [(modelFile, os.path.getsize(modelFile)) for modelFile in faceModels]
+				sizes.sort(key=lambda x: x[1])  # Sort by size
+				hairModel = sizes[0][0]  # Smaller file
+				faceModel = sizes[1][0]  # Larger file
+
+			# If both have "hair" or only one was set, assign the other
+			if faceModel is None:
+				faceModel = faceModels[0] if faceModels[0] != hairModel else faceModels[1]
+
+			# Convert face_high.fmdl
+			try:
+				baseName = os.path.basename(faceModel)[:-6]
+				modelFileObj = model2fmdl.loadModel(faceModel)
+				outputFmdl = os.path.join(facesFolder, "face_high.fmdl")
+				print(f"converting {baseName}.model to face_high.fmdl")
+				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(faceModel))
+				print("saving face_high.fmdl")
+				model2fmdl.saveFmdl(fmdl, outputFmdl)
+				convertedFaceFiles.append("face_high.fmdl")
+			except Exception as e:
+				print(f"WARNING: Failed to convert face model: {e}")
+
+			# Convert hair_high.fmdl
+			try:
+				baseName = os.path.basename(hairModel)[:-6]
+				modelFileObj = model2fmdl.loadModel(hairModel)
+				outputFmdl = os.path.join(facesFolder, "hair_high.fmdl")
+				print(f"converting {baseName}.model to hair_high.fmdl")
+				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(hairModel))
+				print("saving hair_high.fmdl")
+				model2fmdl.saveFmdl(fmdl, outputFmdl)
+				convertedFaceFiles.append("hair_high.fmdl")
+			except Exception as e:
+				print(f"WARNING: Failed to convert hair model: {e}")
+
+		elif len(faceModels) > 2:
+			# More than two models: keep only the two largest
+			print(f"WARNING: Found {len(faceModels)} face models, keeping only the 2 largest")
+			modelSizes = [(modelFile, os.path.getsize(modelFile)) for modelFile in faceModels]
+			modelSizes.sort(key=lambda x: x[1], reverse=True)  # Sort by size, largest first
+			largestTwo = [modelSizes[0][0], modelSizes[1][0]]
+
+			# Determine which is hair based on filename
+			hairModel = None
+			faceModel = None
+
+			for modelFile in largestTwo:
+				baseName = os.path.basename(modelFile)[:-6].lower()
+				if 'hair' in baseName:
+					hairModel = modelFile
+				else:
+					faceModel = modelFile
+
+			# If neither has "hair" in the name, use file size
+			if hairModel is None:
+				print("WARNING: Ambiguous face models - neither has 'hair' in filename, using smaller file as hair_high.fmdl")
+				hairModel = modelSizes[1][0]  # Second largest
+				faceModel = modelSizes[0][0]  # Largest
+
+			# If both have "hair" or only one was set, assign the other
+			if faceModel is None:
+				faceModel = largestTwo[0] if largestTwo[0] != hairModel else largestTwo[1]
+
+			# Convert face_high.fmdl
+			try:
+				baseName = os.path.basename(faceModel)[:-6]
+				modelFileObj = model2fmdl.loadModel(faceModel)
+				outputFmdl = os.path.join(facesFolder, "face_high.fmdl")
+				print(f"converting {baseName}.model to face_high.fmdl")
+				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(faceModel))
+				print("saving face_high.fmdl")
+				model2fmdl.saveFmdl(fmdl, outputFmdl)
+				convertedFaceFiles.append("face_high.fmdl")
+			except Exception as e:
+				print(f"WARNING: Failed to convert face model: {e}")
+
+			# Convert hair_high.fmdl
+			try:
+				baseName = os.path.basename(hairModel)[:-6]
+				modelFileObj = model2fmdl.loadModel(hairModel)
+				outputFmdl = os.path.join(facesFolder, "hair_high.fmdl")
+				print(f"converting {baseName}.model to hair_high.fmdl")
+				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(hairModel))
+				print("saving hair_high.fmdl")
+				model2fmdl.saveFmdl(fmdl, outputFmdl)
+				convertedFaceFiles.append("hair_high.fmdl")
+			except Exception as e:
+				print(f"WARNING: Failed to convert hair model: {e}")
 
 		# Always copy face_diff.bin from lib folder
 		libFaceDiffBin = os.path.join(os.path.dirname(os.path.realpath(__file__)), "face_diff.bin")
@@ -280,14 +389,9 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			# Always include face_diff.bin (from lib folder)
 			f.write('    <Entry FilePath="face_diff.bin" />\n')
 
-			# Add hair_high.fmdl if large face_high_win32.model was converted
-			if hairHighModel is not None:
-				f.write('    <Entry FilePath="hair_high.fmdl" />\n')
-
-			# Add all face .fmdl files
-			for modelFile in faceModels:
-				baseName = os.path.basename(modelFile)[:-6]
-				f.write(f'    <Entry FilePath="{baseName}.fmdl" />\n')
+			# Add all converted face .fmdl files (face_high.fmdl, hair_high.fmdl, etc.)
+			for fmdlFilename in convertedFaceFiles:
+				f.write(f'    <Entry FilePath="{fmdlFilename}" />\n')
 
 			f.write('  </Entries>\n')
 			f.write('  <References />\n')

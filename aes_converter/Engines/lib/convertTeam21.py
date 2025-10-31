@@ -4,7 +4,7 @@ import struct
 import sys
 from PIL import Image
 
-from . import save16, save19
+from . import save16, save19, save21
 from .convertFaceFolder21 import convertBootsFolder, convertFaceFolder, convertGlovesFolder
 from .material import convertTextureFile
 from .util import iglob, ijoin
@@ -218,9 +218,9 @@ def convertPlayer(sourceDirectory, destinationDirectory, relativePlayerId, boots
     #
     # Convert save data
     #
-    # newDestinationPlayerData = convertPlayerSaveData(sourcePlayerData, oldDestinationPlayerData, hasFaceModel, bootsId, glovesId)
+    newDestinationPlayerData = convertPlayerSaveData(sourcePlayerData, oldDestinationPlayerData, hasFaceModel, bootsId, glovesId)
 
-    # return newDestinationPlayerData
+    return newDestinationPlayerData
 
 
 def getTeamName(sourceDirectory):
@@ -420,14 +420,14 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
     sourceSave = save16.SaveFile()
     sourceSave.load(sourceSaveFile)
 
-    destinationSave = save19.SaveFile()
-    destinationSave.load(os.path.join(os.path.dirname(os.path.realpath(__file__)), "EDIT00000000_19"))
+    destinationSave = save21.SaveFile()
+    destinationSave.load(os.path.join(os.path.dirname(os.path.realpath(__file__)), "EDIT00000000_21"))
 
     sourcePlayers = save16.loadPlayers(sourceSave.payload)
-    oldDestinationPlayers = save19.loadPlayers(destinationSave.payload)
+    oldDestinationPlayers = save21.loadPlayers(destinationSave.payload)
     newDestinationPlayers = {}
 
-    for i in range(23):
+    for i in range(1):
         print("  Converting player %02i" % (i + 1))
         sourcePlayerId = sourceTeamId * 100 + i + 1
         destinationPlayerId = destinationTeamId * 100 + i + 1
@@ -441,11 +441,9 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
         oldDestinationPlayer = oldDestinationPlayers[destinationPlayerId]
 
         print("converting player")
-        print(oldDestinationPlayer)
-        print(destinationDirectory)
         oldDestinationPlayerData = oldDestinationPlayer
         if oldDestinationPlayerData is None:
-            print("ERROR: Incomplete player %s found in pes19 save" % destinationPlayerId)
+            print("ERROR: Incomplete player %s found in pes16 save" % destinationPlayerId)
 
         newDestinationPlayers[destinationPlayerId] = convertPlayer(
             sourceDirectory,
@@ -456,6 +454,9 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
             oldDestinationPlayer,
         )
 
+        print("destination player ID")
+        print(destinationPlayerId)
+        print(newDestinationPlayers)
     print("  Converting kits")
     commonDirectory = ijoin(destinationDirectory, "Common")
     if commonDirectory is not None and len(os.listdir(commonDirectory)) == 0:
@@ -464,7 +465,8 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
     convertTeamFiles(sourceDirectory, destinationDirectory)
 
     print("  Creating save")
-    save16.savePlayers(destinationSave.payload, newDestinationPlayers)
+    save21.savePlayers(destinationSave.payload, newDestinationPlayers)
+    print("saving save")
     destinationSave.save(os.path.join(destinationDirectory, "EDIT00000000"))
 
 

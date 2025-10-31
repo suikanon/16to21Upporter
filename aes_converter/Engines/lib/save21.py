@@ -213,7 +213,6 @@ def savePlayers(save, players):
 	for i in range(playerCount):
 		playerData = save[0x7c + 312 * i : 0x7c + 312 * (i + 1)]
 		(playerID, ) = struct.unpack('<I', playerData[240:244])
-
 		if playerID in players:
 			assert len(players[playerID]) == 312, "Invalid player data block"
 			save[0x7c + 312 * i : 0x7c + 312 * (i + 1)] = players[playerID]

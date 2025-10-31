@@ -154,6 +154,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 	faceDiffBinFilename = None
 	portraitFilename = None
 	allTextureFiles = []
+	hasFaceHighWin32Only = False  # Track if we only have face_high_win32.model (small size)
+	hairHighModel = None  # Track face_high_win32.model if size > 990 bytes
 
 	for directory in sourceDirectories:
 		# Find all .model files
@@ -161,6 +163,16 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 
 		for modelFile in modelFiles:
 			baseName = os.path.basename(modelFile)[:-6].lower()  # Remove .model extension
+
+			# Special handling for face_high_win32.model
+			if baseName == 'face_high_win32':
+				fileSize = os.path.getsize(modelFile)
+				if fileSize > 990:
+					print(f"face_high_win32.model is {fileSize} bytes, will convert to hair_high.fmdl")
+					hairHighModel = modelFile
+				else:
+					print(f"skipping face_high_win32.model ({fileSize} bytes <= 990)")
+				continue
 
 			# Categorize by type based on filename
 			if 'face' in baseName or 'hair' in baseName:
@@ -191,8 +203,28 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 				if 'portrait' not in os.path.basename(texFile).lower():
 					allTextureFiles.append(texFile)
 
-	# Convert face models if any exist
-	if len(faceModels) > 0:
+	# Check if we only have small face_high_win32.model (no other face models)
+	# We still need to create the Faces folder in this case
+	for directory in sourceDirectories:
+		allFaceTypeModels = []
+		modelFiles = iglob(directory, "*.model")
+		for modelFile in modelFiles:
+			baseName = os.path.basename(modelFile)[:-6].lower()
+			if 'face' in baseName or 'hair' in baseName:
+				# Check if it's a small face_high_win32
+				if baseName == 'face_high_win32':
+					fileSize = os.path.getsize(modelFile)
+					if fileSize <= 990:
+						allFaceTypeModels.append(baseName)
+				else:
+					allFaceTypeModels.append(baseName)
+
+		# If we have small face_high_win32 but no other face models, set the flag
+		if 'face_high_win32' in allFaceTypeModels and len(allFaceTypeModels) == 1:
+			hasFaceHighWin32Only = True
+
+	# Convert face models if any exist, OR if we have hair_high to convert, OR if we only have small face_high_win32.model
+	if len(faceModels) > 0 or hairHighModel is not None or hasFaceHighWin32Only:
 		# Create Faces/XXX01 - PlayerName/ subfolder
 		facesParentFolder = os.path.join(destinationDirectory, "Faces")
 		if not os.path.exists(facesParentFolder):
@@ -202,6 +234,7 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 		if not os.path.exists(facesFolder):
 			os.makedirs(facesFolder)
 
+		# Convert all face models
 		for modelFile in faceModels:
 			baseName = os.path.basename(modelFile)[:-6]  # Remove .model
 			try:
@@ -216,11 +249,26 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			except Exception as e:
 				print(f"WARNING: Failed to convert {modelFile}: {e}")
 
-		# Copy face_diff.bin if present and not empty
-		if faceDiffBinFilename is not None:
-			faceDiffBin = open(faceDiffBinFilename, 'rb').read()
-			if not faceDiffFileIsEmpty(faceDiffBin):
-				shutil.copy(faceDiffBinFilename, os.path.join(facesFolder, "face_diff.bin"))
+		# Convert hair_high model if it exists (large face_high_win32.model)
+		if hairHighModel is not None:
+			try:
+				modelFileObj = model2fmdl.loadModel(hairHighModel)
+				outputFmdl = os.path.join(facesFolder, "hair_high.fmdl")
+				print("converting face_high_win32.model to hair_high.fmdl")
+				print(hairHighModel)
+				print(os.path.dirname(hairHighModel))
+				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(hairHighModel))
+				print("saving hair_high.fmdl")
+				model2fmdl.saveFmdl(fmdl, outputFmdl)
+			except Exception as e:
+				print(f"WARNING: Failed to convert hair_high model: {e}")
+
+		# Always copy face_diff.bin from lib folder
+		libFaceDiffBin = os.path.join(os.path.dirname(os.path.realpath(__file__)), "face_diff.bin")
+		if os.path.exists(libFaceDiffBin):
+			shutil.copy(libFaceDiffBin, os.path.join(facesFolder, "face_diff.bin"))
+		else:
+			print("WARNING: face_diff.bin not found in lib folder")
 
 		# Create face.fpk.xml
 		fpkXml = os.path.join(facesFolder, "face.fpk.xml")
@@ -229,11 +277,12 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			f.write('<ArchiveFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="FpkFile" Name="face.fpk" FpkType="Fpk">\n')
 			f.write('  <Entries>\n')
 
-			# Add face_diff.bin if it exists
-			if faceDiffBinFilename is not None:
-				faceDiffBin = open(faceDiffBinFilename, 'rb').read()
-				if not faceDiffFileIsEmpty(faceDiffBin):
-					f.write('    <Entry FilePath="face_diff.bin" />\n')
+			# Always include face_diff.bin (from lib folder)
+			f.write('    <Entry FilePath="face_diff.bin" />\n')
+
+			# Add hair_high.fmdl if large face_high_win32.model was converted
+			if hairHighModel is not None:
+				f.write('    <Entry FilePath="hair_high.fmdl" />\n')
 
 			# Add all face .fmdl files
 			for modelFile in faceModels:
@@ -316,14 +365,31 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 		if not os.path.exists(glovesFolder):
 			os.makedirs(glovesFolder)
 
+		# Track which glove files were converted (for fpk.xml)
+		convertedGloveNames = []
+
 		for modelFile in gloveModels:
 			baseName = os.path.basename(modelFile)[:-6]  # Remove .model
+
+			# Determine output name based on suffix
+			# Files ending with _l become glove_l.fmdl, files ending with _r become glove_r.fmdl
+			if baseName.lower().endswith('_l'):
+				outputName = "glove_l"
+			elif baseName.lower().endswith('_r'):
+				outputName = "glove_r"
+			else:
+				outputName = baseName
+
 			try:
 				modelFileObj = model2fmdl.loadModel(modelFile)
-				outputFmdl = os.path.join(glovesFolder, f"{baseName}.fmdl")
+				outputFmdl = os.path.join(glovesFolder, f"{outputName}.fmdl")
 				fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(modelFile))
-				print("saving glove model")
+				print(f"saving glove model: {baseName}.model -> {outputName}.fmdl")
 				model2fmdl.saveFmdl(fmdl, outputFmdl)
+
+				# Track the output name for fpk.xml (avoid duplicates)
+				if outputName not in convertedGloveNames:
+					convertedGloveNames.append(outputName)
 			except Exception as e:
 				print(f"WARNING: Failed to convert {modelFile}: {e}")
 
@@ -334,10 +400,9 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 			f.write('<ArchiveFile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xsi:type="FpkFile" Name="glove.fpk" FpkType="Fpk">\n')
 			f.write('  <Entries>\n')
 
-			# Add all glove .fmdl files
-			for modelFile in gloveModels:
-				baseName = os.path.basename(modelFile)[:-6]
-				f.write(f'    <Entry FilePath="{baseName}.fmdl" />\n')
+			# Add all converted glove .fmdl files
+			for gloveName in convertedGloveNames:
+				f.write(f'    <Entry FilePath="{gloveName}.fmdl" />\n')
 
 			f.write('  </Entries>\n')
 			f.write('  <References />\n')

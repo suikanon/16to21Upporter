@@ -200,6 +200,114 @@ def buildFmdlMaterials():
 	return
 
 
+def parseFaceXml(directory):
+	"""
+	Parse face.xml file to get model type mappings.
+
+	Args:
+		directory: Directory to search for face.xml
+
+	Returns:
+		Dictionary mapping model filename (lowercase) to type, or None if face.xml not found
+	"""
+	faceXmlPath = ijoin(directory, "face.xml")
+	if faceXmlPath is None:
+		return None
+
+	try:
+		tree = ElementTree.parse(faceXmlPath)
+		root = tree.getroot()
+
+		modelTypeMap = {}
+
+		# Find all <model> elements
+		for modelElement in root.findall('.//model'):
+			modelType = modelElement.get('type')
+			modelPath = modelElement.get('path')
+
+			if modelType and modelPath:
+				# Extract filename from path (handle wildcards and paths)
+				# Path formats: "./face_high_*.model" or "./oral_body.model"
+				modelPath = modelPath.replace('\\', '/')
+				modelFilename = os.path.basename(modelPath)
+
+				# Handle wildcards - store pattern for matching
+				if '*' in modelFilename:
+					# Store the pattern for later matching
+					modelTypeMap[modelFilename.lower()] = modelType
+				else:
+					# Exact filename
+					modelTypeMap[modelFilename.lower()] = modelType
+
+		return modelTypeMap
+
+	except Exception as e:
+		print(f"WARNING: Failed to parse face.xml in {directory}: {e}")
+		return None
+
+
+def categorizeModelByType(modelType):
+	"""
+	Categorize a model type as 'boots', 'faces', or 'gloves'.
+
+	Args:
+		modelType: Type string from face.xml
+
+	Returns:
+		'boots', 'faces', 'gloves', or None if unknown
+	"""
+	if not modelType:
+		return None
+
+	modelType = modelType.lower()
+
+	# Boots types
+	bootsTypes = {'body', 'arm', 'wrist', 'uniform', 'shirt', 'cuff', 'collar', 'boots', 'parts'}
+	if modelType in bootsTypes:
+		return 'boots'
+
+	# Faces types
+	facesTypes = {'face', 'face_neck', 'face_montage', 'eye', 'mouth', 'neck', 'head',
+	              'hair', 'hair_cloth', 'edithair'}
+	if modelType in facesTypes:
+		return 'faces'
+
+	# Gloves types
+	glovesTypes = {'handl', 'handr', 'glovel', 'glover'}
+	if modelType in glovesTypes:
+		return 'gloves'
+
+	return None
+
+
+def matchModelToType(modelFilename, modelTypeMap):
+	"""
+	Match a model filename to its type using the modelTypeMap.
+
+	Args:
+		modelFilename: Basename of the model file (e.g., "oral_body.model")
+		modelTypeMap: Dictionary from parseFaceXml
+
+	Returns:
+		Model type string, or None if no match
+	"""
+	modelFilename = modelFilename.lower()
+
+	# Try exact match first
+	if modelFilename in modelTypeMap:
+		return modelTypeMap[modelFilename]
+
+	# Try pattern matching (for wildcards like "face_high_*.model")
+	for pattern, modelType in modelTypeMap.items():
+		if '*' in pattern:
+			# Convert glob pattern to regex
+			import fnmatch
+			if fnmatch.fnmatch(modelFilename, pattern):
+				return modelType
+
+	return None
+
+
 def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestinationDirectory, bootsSklPath, playerFolderName=None, bootsGlovesBaseId=None, relativePlayerId=None):
 	"""
 	Convert a PES16 face folder (unified face/boots/gloves) to PES21 format.
@@ -240,11 +348,21 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 	hairHighModel = None  # Track face_high_win32.model if size > 990 bytes
 
 	for directory in sourceDirectories:
+		# Try to parse face.xml for model type information
+		modelTypeMap = parseFaceXml(directory)
+		useFaceXml = modelTypeMap is not None
+
+		if useFaceXml:
+			print(f"Using face.xml for model categorization in {directory}")
+		else:
+			print(f"No face.xml found, using filename-based categorization in {directory}")
+
 		# Find all .model files
 		modelFiles = iglob(directory, "*.model")
 
 		for modelFile in modelFiles:
 			baseName = os.path.basename(modelFile)[:-6].lower()  # Remove .model extension
+			fullBaseName = os.path.basename(modelFile).lower()  # With .model extension
 
 			# Special handling for face_high_win32.model
 			if baseName == 'face_high_win32':
@@ -256,16 +374,38 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
 					print(f"skipping face_high_win32.model ({fileSize} bytes <= 990)")
 				continue
 
-			# Categorize by type based on filename
-			if 'face' in baseName or 'hair' in baseName:
-				print("adding face")
+			# Determine category
+			category = None
+
+			if useFaceXml:
+				# Use face.xml for categorization
+				modelType = matchModelToType(fullBaseName, modelTypeMap)
+				if modelType:
+					category = categorizeModelByType(modelType)
+					if category:
+						print(f"face.xml: {fullBaseName} has type '{modelType}' -> {category}")
+					else:
+						print(f"WARNING: Unknown model type '{modelType}' for {fullBaseName}, using filename fallback")
+
+			# Fallback to filename-based categorization if face.xml didn't provide a category
+			if category is None:
+				if 'face' in baseName or 'hair' in baseName:
+					category = 'faces'
+				elif 'glove' in baseName or 'hand' in baseName:
+					category = 'gloves'
+				else:
+					# Everything else goes to boots (parts/uniform)
+					category = 'boots'
+
+			# Add to appropriate list
+			if category == 'faces':
+				print(f"adding face: {baseName}")
 				faceModels.append(modelFile)
-			elif 'glove' in baseName or 'hand' in baseName:
-				print("adding glove")
+			elif category == 'gloves':
+				print(f"adding glove: {baseName}")
 				gloveModels.append(modelFile)
-			else:
-				# Everything else goes to boots (parts/uniform)
-				print("adding boots")
+			elif category == 'boots':
+				print(f"adding boots: {baseName}")
 				bootsModels.append(modelFile)
 
 		# Look for face_diff.bin

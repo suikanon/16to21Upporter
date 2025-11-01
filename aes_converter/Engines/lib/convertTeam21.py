@@ -5,7 +5,7 @@ import sys
 from PIL import Image
 
 from . import save16, save19, save21
-from .convertFaceFolder21 import convertBootsFolder, convertFaceFolder, convertGlovesFolder
+from .convertFaceFolder21 import convertFaceFolder
 from .material import convertTextureFile
 from .util import iglob, ijoin
 

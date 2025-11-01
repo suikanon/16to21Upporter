@@ -252,13 +252,15 @@ def convertBones(modelBones):
 	return fmdlBones, {modelBone: fmdlBonesByName[name] for modelBone, name in modelBoneNames.items()}
 
 
-def convertMaterials(model, sourceDirectory):
+def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None):
 	"""
 	Convert materials from ModelFile format to FmdlFile MaterialInstance format.
 
 	Args:
 		model: ModelFile object containing materials
 		sourceDirectory: Path to directory containing .model file and .mtl files
+		modelType: Optional model type from face.xml (e.g., 'uniform', 'face_neck', 'parts')
+		modelCategory: Optional model category ('faces', 'boots', 'gloves')
 
 	Returns:
 		List of FmdlFile.MaterialInstance objects
@@ -339,18 +341,36 @@ def convertMaterials(model, sourceDirectory):
 				# Create FmdlTexture object
 				texture = FmdlFile.FmdlFile.Texture()
 
-				# Extract filename from path (remove ./ prefix if present)
-				if texturePath.startswith('./'):
-					texturePath = texturePath[2:]
-
-				texture.filename = os.path.basename(texturePath)
-
-				# Determine directory based on model type
-				# Check if this is a face model or boots model
-				if 'face' in materialName.lower() or 'hair' in materialName.lower() or 'oral' in materialName.lower():
-					texture.directory = '/Assets/pes16/model/character/face/real/75314/sourceimages/'
+				# Special case: uniform type models use standard uniform texture path
+				if modelType and modelType.lower() == 'uniform':
+					texture.directory = '/Assets/pes16/model/character/uniform/texture/'
+					texture.filename = 'u0123p1.ftex'
+				# Check if texture path references Common folder
+				elif texturePath.startswith('model/character/uniform/common'):
+					# Common folder texture
+					texture.directory = '/Assets/pes16/model/character/common/000/sourceimages/'
+					texture.filename = os.path.basename(texturePath)
 				else:
-					texture.directory = '/Assets/pes16/model/character/boots/k0051/'
+					# Local texture (path starts with ./ or is just a filename)
+					# Extract filename from path (remove ./ prefix if present)
+					if texturePath.startswith('./'):
+						texturePath = texturePath[2:]
+
+					texture.filename = os.path.basename(texturePath)
+
+					# Determine directory based on model category
+					if modelCategory == 'faces':
+						texture.directory = '/Assets/pes16/model/character/face/real/00000/sourceimages/'
+					elif modelCategory == 'boots':
+						texture.directory = '/Assets/pes16/model/character/boots/k0000/'
+					elif modelCategory == 'gloves':
+						texture.directory = '/Assets/pes16/model/character/glove/g0000/'
+					else:
+						# Fallback: use old logic based on material name
+						if 'face' in materialName.lower() or 'hair' in materialName.lower() or 'oral' in materialName.lower():
+							texture.directory = '/Assets/pes16/model/character/face/real/00000/sourceimages/'
+						else:
+							texture.directory = '/Assets/pes16/model/character/boots/k0000/'
 
 				# Add texture to materialInstance with 'Base_Tex_SRGB' key
 				materialInstance.textures = [('Base_Tex_SRGB', texture)]
@@ -516,12 +536,23 @@ def calculateBoundingBoxes(meshGroups, bones, meshes):
 			calculateMeshGroupBoundingBox(meshGroup)
 
 
-def convertModel(model, sourceDirectory):
-	"""Convert ModelFile to FmdlFile."""
+def convertModel(model, sourceDirectory, modelType=None, modelCategory=None):
+	"""
+	Convert ModelFile to FmdlFile.
+
+	Args:
+		model: ModelFile object to convert
+		sourceDirectory: Directory containing the model file
+		modelType: Optional model type from face.xml (e.g., 'uniform', 'face_neck', 'parts')
+		modelCategory: Optional model category ('faces', 'boots', 'gloves')
+
+	Returns:
+		FmdlFile object
+	"""
 	fmdlFile = FmdlFile.FmdlFile()
 
 	# 1. Materials
-	materialInstances = convertMaterials(model, sourceDirectory)
+	materialInstances = convertMaterials(model, sourceDirectory, modelType, modelCategory)
 	fmdlFile.materialInstances = materialInstances
 
 	# 2. Bones
@@ -539,7 +570,7 @@ def convertModel(model, sourceDirectory):
 	return fmdlFile
 
 
-def combineBootsModels(modelFiles, sourceDirectory):
+def combineBootsModels(modelFiles, sourceDirectory, modelMetadata=None):
 	"""
 	Combine multiple .model files into a single FMDL file (e.g., for boots).
 
@@ -548,10 +579,14 @@ def combineBootsModels(modelFiles, sourceDirectory):
 	Args:
 	    modelFiles: List of .model file paths to combine
 	    sourceDirectory: Directory containing the models (for material lookup)
+	    modelMetadata: Optional dict mapping modelFile -> {'type': str, 'category': str}
 
 	Returns:
 	    Combined FmdlFile object
 	"""
+	if modelMetadata is None:
+		modelMetadata = {}
+
 	if len(modelFiles) == 0:
 		# No models to combine, return empty FMDL
 		return FmdlFile.FmdlFile()
@@ -559,13 +594,23 @@ def combineBootsModels(modelFiles, sourceDirectory):
 	if len(modelFiles) == 1:
 		# Only one model, just convert it normally
 		modelFileObj = loadModel(modelFiles[0])
-		return convertModel(modelFileObj, sourceDirectory)
+		# Get metadata for this model
+		metadata = modelMetadata.get(modelFiles[0], {})
+		# combineBootsModels is always for boots category
+		return convertModel(modelFileObj, sourceDirectory,
+		                    modelType=metadata.get('type'),
+		                    modelCategory=metadata.get('category', 'boots'))
 
 	# Step 1: Load and convert all models to FMDL
 	fmdlFiles = []
 	for modelFile in modelFiles:
 		modelFileObj = loadModel(modelFile)
-		fmdlFile = convertModel(modelFileObj, os.path.dirname(modelFile))
+		# Get metadata for this model
+		metadata = modelMetadata.get(modelFile, {})
+		# All models in combineBootsModels are boots category
+		fmdlFile = convertModel(modelFileObj, os.path.dirname(modelFile),
+		                        modelType=metadata.get('type'),
+		                        modelCategory=metadata.get('category', 'boots'))
 		fmdlFiles.append(fmdlFile)
 
 	# Step 2: Create merged FMDL file
@@ -641,8 +686,8 @@ def loadModel(filename):
 
 def saveFmdl(fmdlFile, filename):
 	"""Save an FmdlFile to disk with encoding."""
+	fmdlFile = FmdlAntiBlur.encodeFmdlAntiBlur(fmdlFile)
 	fmdlFile = FmdlSplitVertexEncoding.encodeFmdlVertexLoopPreservation(fmdlFile)
 	fmdlFile = FmdlMeshSplitting.encodeFmdlSplitMeshes(fmdlFile)
-	fmdlFile = FmdlAntiBlur.encodeFmdlAntiBlur(fmdlFile)
 
 	FmdlFile.FmdlFile.writeFile(fmdlFile, filename)

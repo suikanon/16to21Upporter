@@ -110,9 +110,59 @@ def convertMesh(modelMesh, modelFmdlBones, materialInstances):
 	if fmdlMesh.materialInstance is None and len(materialInstances) > 0:
 		fmdlMesh.materialInstance = materialInstances[0]
 
-	# Default alpha/shadow flags
-	fmdlMesh.alphaFlags = 0
-	fmdlMesh.shadowFlags = 1
+	# Calculate alpha/shadow flags based on material properties
+	if fmdlMesh.materialInstance is not None:
+		matInst = fmdlMesh.materialInstance
+
+		# Determine if this is a deferred (3DDF) or forward (3DFW) shader
+		isDeferred = '3ddf' in matInst.shader.lower()
+		isForward = '3dfw' in matInst.shader.lower()
+
+		# Get MTL properties (with defaults if not present)
+		twosided = getattr(matInst, 'mtl_twosided', False)
+		alphablend = getattr(matInst, 'mtl_alphablend', False)
+
+		# Calculate alphaFlags
+		if isDeferred:
+			# Deferred Shaders (fox3DDF, pes3DDF)
+			# 0 = No Transparency, One Sided
+			# 32 = No Transparency, Two Sided
+			# 128 = Transparency, One Sided
+			# 160 = Transparency, Two Sided
+			if alphablend:
+				fmdlMesh.alphaFlags = 160 if twosided else 128
+			else:
+				fmdlMesh.alphaFlags = 32 if twosided else 0
+
+			# Shadow flags for deferred shaders
+			# 0 = The mesh has shadows
+			# 1 = The mesh doesn't have shadows
+			# 2 = Invisible but casts shadow
+			# 3 = Invisible and no shadow
+			fmdlMesh.shadowFlags = 0  # Enable shadows
+
+		elif isForward:
+			# Forward Shaders (fox3DFW, pes3DFW)
+			# 16 = Transparency, One Sided
+			# 48 = Transparency, Two Sided
+			# Forward shaders always have transparency enabled
+			fmdlMesh.alphaFlags = 48 if twosided else 16
+
+			# Shadow flags for forward shaders
+			# 2 = Invisible but casts shadow
+			# 4 = The mesh has shadows
+			# 5 = The mesh doesn't have shadows
+			fmdlMesh.shadowFlags = 4  # Enable shadows
+
+		else:
+			# Unknown shader type, use safe defaults
+			fmdlMesh.alphaFlags = 0
+			fmdlMesh.shadowFlags = 1
+
+	else:
+		# No material instance, use safe defaults
+		fmdlMesh.alphaFlags = 0
+		fmdlMesh.shadowFlags = 1
 
 	# Calculate bounding box
 	if len(fmdlMesh.vertices) > 0:
@@ -252,9 +302,29 @@ def convertMaterials(model, sourceDirectory):
 			if shader == 'Basic_C':
 				materialInstance.technique = 'fox3DDF_Blin'
 				materialInstance.shader = 'fox3ddf_blin'
+			elif shader == 'Shadeless':
+				materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR_Solid'
+				materialInstance.shader = 'fox3dfw_constant_srgb_ndr_solid'
+			elif shader == 'Basic_CNSR':
+				materialInstance.technique = 'fox3DDF_Blin'
+				materialInstance.shader = 'fox3ddf_blin'
 			else:
-				materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR'
-				materialInstance.shader = 'fox3dfw_constant_srgb_ndr'
+				materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR_Solid'
+				materialInstance.shader = 'fox3dfw_constant_srgb_ndr_solid'
+
+			# Extract MTL state properties for alpha/shadow flag calculation
+			# Store as custom attributes on the materialInstance
+			materialInstance.mtl_twosided = False
+			materialInstance.mtl_alphablend = False
+
+			for stateElement in materialElement.findall('state'):
+				stateName = stateElement.get('name')
+				stateValue = stateElement.get('value', '0')
+
+				if stateName == 'twosided':
+					materialInstance.mtl_twosided = (stateValue == '1')
+				elif stateName == 'alphablend':
+					materialInstance.mtl_alphablend = (stateValue == '1')
 
 			# Find DiffuseMap sampler
 			diffuseMapSampler = None
@@ -289,9 +359,12 @@ def convertMaterials(model, sourceDirectory):
 		else:
 			# Material not found in .mtl file, use default values
 			print(f"WARNING: Material '{materialName}' not found in .mtl files, using defaults")
-			materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR'
-			materialInstance.shader = 'fox3dfw_constant_srgb_ndr'
+			materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR_Solid'
+			materialInstance.shader = 'fox3dfw_constant_srgb_ndr_solid'
 			materialInstance.textures = []
+			# Default MTL properties
+			materialInstance.mtl_twosided = False
+			materialInstance.mtl_alphablend = False
 
 		# Parameters field is left empty as per requirements
 		materialInstance.parameters = []

@@ -28,7 +28,7 @@ def writeString(buffer, offset, string):
 # Creates PES21 savedata for a player based on PES16 savedata.
 #
 def convertPlayerSaveData(sourcePlayerData, oldDestinationPlayerData, hasFaceModel, destinationBootsId,
-                          destinationGlovesId):
+                          destinationGlovesId, hasBootsModel=False, hasGlovesModel=False):
     """
     Convert PES16 player save data to PES21 format.
 
@@ -41,6 +41,8 @@ def convertPlayerSaveData(sourcePlayerData, oldDestinationPlayerData, hasFaceMod
         hasFaceModel: Whether this player has a custom face model
         destinationBootsId: Boots ID to assign, or None to auto-assign
         destinationGlovesId: Gloves ID to assign, or None to auto-assign
+        hasBootsModel: Whether this player has a custom boots model
+        hasGlovesModel: Whether this player has a custom gloves model
 
     Returns:
         312-byte bytearray of updated PES21 player data
@@ -73,8 +75,8 @@ def convertPlayerSaveData(sourcePlayerData, oldDestinationPlayerData, hasFaceMod
         return value
 
     # Copy basic player info
-    # Player name (PES16: offset 52, PES21: offset 54)
-    playerName = readString(sourcePlayerData, 52)
+    # Player name (PES16: offset 50, PES21: offset 54)
+    playerName = readString(sourcePlayerData, 50)
     writeString(playerData, 54, playerName[0:45])
 
     # Shirt name (PES16: offset 98, PES21: offset 100)
@@ -95,63 +97,113 @@ def convertPlayerSaveData(sourcePlayerData, oldDestinationPlayerData, hasFaceMod
     sourceGlovesId = readSourceBits(4, 18, 14)
 
     # Determine destination boots ID
-    if destinationBootsId is not None:
+    if hasBootsModel and destinationBootsId is not None:
+        # Player has custom boots model, use assigned ID
         finalBootsId = destinationBootsId
-    elif sourceBootsId < 39:
-        finalBootsId = 0
-    else:
+    elif hasBootsModel:
+        # Player has custom boots model but no ID assigned - use default custom boots ID
         finalBootsId = 55
+    else:
+        # Use default boots (ID 0)
+        finalBootsId = 0
 
     # Determine destination gloves ID
-    if destinationGlovesId is not None:
+    if hasGlovesModel and destinationGlovesId is not None:
+        # Player has custom gloves model, use assigned ID
         finalGlovesId = destinationGlovesId
-    elif sourceGlovesId == 0:
-        finalGlovesId = 0
-    elif sourceGlovesId < 11:
-        finalGlovesId = sourceGlovesId
-    else:
+    elif hasBootsModel:
+        # Player has custom boots, hide vanilla gloves
         finalGlovesId = 11
-
-    # Write boots and gloves IDs to PES21 data (at offset 120, same bitfield layout)
-    writeBits(120, 4, 14, finalBootsId)
-    writeBits(120, 18, 14, finalGlovesId)
-
-    # Set edited bits flag (at offset 120)
-    if hasFaceModel:
-        writeBits(120, 0, 4, 0x0c)  # custom face model
     else:
-        writeBits(120, 0, 4, 0x0f)  # ingame face
+        # No default gloves (ID 0)
+        finalGlovesId = 0
+
+    if hasFaceModel:
+        writeBits(244, 0, 4, 0x0c)
+    else:
+        writeBits(244, 0, 4, 0x0f)
+
+    writeBits(244, 4, 14, finalBootsId)
+    writeBits(246, 2, 14, finalGlovesId)
+
+
+
+    # # Write boots and gloves IDs and edited flags to PES21 data
+    # # Player appearance entry starts at byte 240 (0xF0) after the player entry block
+    # #
+    # # IMPORTANT: Boots (0x04:4, 14 bits), Gloves (0x06:2, 10 bits), and Edited flags (0x04:0, 4 bits)
+    # # all fall within the same 32-bit word (bytes 244-247), so we must write them together
+    # # to avoid corruption from overlapping writes.
+    # #
+    # # Bit layout within the 32-bit word starting at byte 244:
+    # # - Bits 0-3: Edited flags (4 bits)
+    # # - Bits 4-17: Boots ID (14 bits)
+    # # - Bits 18-27: Gloves ID (10 bits)
+    # # - Bits 28-31: Unknown A (4 bits)
+    #
+    # # Set edited flags value
+    # if hasFaceModel:
+    #     editedFlags = 0x0c  # Edited Face/Hairstyle/Physique/Strip Style settings
+    # else:
+    #     editedFlags = 0x0f  # ingame face
+    #
+    # # Read the current 32-bit word
+    # (word32,) = struct.unpack('< I', playerData[244:248])
+    #
+    # # Clear the bits we're going to set (bits 0-27 = edited flags + boots + gloves)
+    # word32 = word32 & ~0x0FFFFFFF  # Keep bits 28-31, clear bits 0-27
+    #
+    # # Set the new values
+    # word32 = word32 | (editedFlags << 0)       # Bits 0-3: edited flags
+    # word32 = word32 | (finalBootsId << 4)      # Bits 4-17: boots ID
+    # word32 = word32 | (finalGlovesId << 18)    # Bits 18-27: gloves ID
+    #
+    # # Write back the modified word
+    # playerData[244:248] = struct.pack('< I', word32)
 
     # Copy appearance settings
-    writeBits(124, 0, 32, 0)  # base copy id
-    writeBits(135, 0, 6, 0)  # wrist tape color
-    writeBits(135, 6, 2, 0)  # wrist tape enabled
-    writeBits(136, 0, 6, readSourceBits(20, 0, 6))  # glasses
-    writeBits(136, 6, 2, readSourceBits(20, 6, 2))  # sleeves
-    writeBits(137, 0, 2, readSourceBits(21, 0, 2))  # inners
-    writeBits(137, 2, 2, readSourceBits(21, 2, 2))  # socks
-    writeBits(137, 4, 2, readSourceBits(21, 4, 2))  # undershorts
-    writeBits(137, 6, 1, readSourceBits(21, 6, 1))  # shirttail
-    writeBits(137, 7, 1, 0)  # ankle taping
-    writeBits(138, 0, 4, 0)  # winter gloves
+    writeBits(248, 0, 32, 0)  # 240 + 0x08:0 (Base Copy Player - 4 bytes)
+    writeBits(259, 0, 6, 0)  # 240 + 0x13:0 (Wrist tape color left + right = 6 bits total)
+    writeBits(259, 6, 2, 0)  # 240 + 0x13:6 (Wrist Taping)
+    writeBits(260, 3, 3, readSourceBits(20, 0, 6))  # 240 + 0x14:3 (Spectacles - only 3 bits, need to adjust source)
+
+    # Set Sleeves based on boots model: 2 (Long) if has boots, 1 (Short) otherwise
+    sleevesValue = 2 if hasBootsModel else 1
+    writeBits(260, 6, 2, sleevesValue)  # 240 + 0x14:6 (Sleeves)
+
+    writeBits(261, 0, 2, readSourceBits(21, 0, 2))  # 240 + 0x15:0 (Long-Sleeved Inners)
+
+    # Set Sock Length based on boots model: 2 (Short) if has boots, 0 (Standard) otherwise
+    sockLengthValue = 2 if hasBootsModel else 0
+    writeBits(261, 2, 2, sockLengthValue)  # 240 + 0x15:2 (Sock Length)
+
+    writeBits(261, 4, 2, readSourceBits(21, 4, 2))  # 240 + 0x15:4 (Undershorts)
+
+    # Set Shirttail based on boots model: 0 (Tucked) if has boots, 1 (Untucked) otherwise
+    shirttailValue = 0 if hasBootsModel else 1
+    writeBits(261, 6, 1, shirttailValue)  # 240 + 0x15:6 (Shirttail)
+
+    writeBits(261, 7, 1, 0)  # 240 + 0x15:7 (Ankle taping)
+    writeBits(262, 0, 1, 0)  # 240 + 0x16:0 (Player Gloves - on/off)
+    writeBits(262, 1, 3, 0)  # 240 + 0x16:1 (Player Gloves color)
 
     # Copy facial features with validation
     skinColor = readSourceBits(45, 0, 3)
     if skinColor == 7:
         skinColor = 1  # reset invisible skin
-    writeBits(161, 0, 3, skinColor)
+    writeBits(285, 0, 3, skinColor)  # 240 + 0x2D:0 (Skin color)
 
-    writeBits(161, 3, 5, cap(3, 0, readSourceBits(45, 3, 5)))  # cheek type
-    writeBits(162, 0, 3, cap(5, 0, readSourceBits(46, 0, 3)))  # forehead type
-    writeBits(162, 3, 5, cap(12, 0, readSourceBits(46, 3, 5)))  # facial hair type
-    writeBits(163, 0, 3, cap(4, 0, readSourceBits(47, 0, 3)))  # laughter lines type
-    writeBits(163, 3, 3, cap(6, 0, readSourceBits(47, 3, 3)))  # upper eyelid type
-    writeBits(164, 0, 3, cap(2, 0, readSourceBits(48, 0, 3)))  # lower eyelid type
-    writeBits(166, 0, 3, cap(5, 0, readSourceBits(50, 0, 3)))  # eyebrow type
-    writeBits(166, 5, 2, cap(2, 0, readSourceBits(50, 5, 2)))  # neck line type
-    writeBits(168, 0, 3, cap(6, 0, readSourceBits(52, 0, 3)))  # nose type
-    writeBits(169, 0, 3, cap(3, 0, readSourceBits(53, 0, 3)))  # upper lip type
-    writeBits(169, 3, 3, cap(2, 0, readSourceBits(53, 3, 3)))  # lower lip type
+    writeBits(285, 3, 5, cap(3, 0, readSourceBits(45, 3, 5)))  # 240 + 0x2D:3 (Cheek Type)
+    writeBits(286, 0, 3, cap(5, 0, readSourceBits(46, 0, 3)))  # 240 + 0x2E:0 (Forehead Type)
+    writeBits(286, 3, 5, cap(19, 0, readSourceBits(46, 3, 5)))  # 240 + 0x2E:3 (Facial Hair Type)
+    writeBits(287, 0, 3, cap(4, 0, readSourceBits(47, 0, 3)))  # 240 + 0x2F:0 (Laughter Lines)
+    writeBits(287, 3, 3, cap(7, 0, readSourceBits(47, 3, 3)))  # 240 + 0x2F:3 (Upper Eyelid Type)
+    writeBits(288, 0, 3, cap(6, 0, readSourceBits(48, 0, 3)))  # 240 + 0x30:0 (Bottom Eyelid Type)
+    writeBits(290, 0, 3, cap(7, 0, readSourceBits(50, 0, 3)))  # 240 + 0x32:0 (Eyebrow Type)
+    writeBits(290, 5, 2, cap(3, 0, readSourceBits(50, 5, 2)))  # 240 + 0x32:5 (Neck Line Type)
+    writeBits(292, 0, 3, cap(7, 0, readSourceBits(52, 0, 3)))  # 240 + 0x34:0 (Nose Type)
+    writeBits(293, 0, 3, cap(4, 0, readSourceBits(53, 0, 3)))  # 240 + 0x35:0 (Upper Lip Type)
+    writeBits(293, 3, 3, cap(4, 0, readSourceBits(53, 3, 3)))  # 240 + 0x35:3 (Lower Lip Type)
 
     return playerData
 
@@ -222,6 +274,8 @@ def convertPlayer(sourceDirectory, destinationDirectory, relativePlayerId, boots
     bootsId = None
     glovesId = None
     hasFaceModel = False
+    hasBootsModel = False
+    hasGlovesModel = False
 
     if sourceFaceDirectory is not None:
         #
@@ -231,21 +285,51 @@ def convertPlayer(sourceDirectory, destinationDirectory, relativePlayerId, boots
         convertFaceFolder([sourceFaceDirectory], destinationDirectory, commonDirectory, bootsSklPath,
                          playerFolderName=None, bootsGlovesBaseId=bootsGlovesBaseId, relativePlayerId=relativePlayerId)
 
+        # Determine player folder name (same logic as in convertFaceFolder)
+        playerFolderName = os.path.basename(sourceFaceDirectory)
+
+        # Calculate boots/gloves ID and extract player name for k#### format
+        if bootsGlovesBaseId is not None and relativePlayerId is not None:
+            calculatedBootsId = bootsGlovesBaseId + relativePlayerId - 1
+            # Extract player name from playerFolderName (format: "XXX01 - PlayerName")
+            if playerFolderName and " - " in playerFolderName:
+                playerName = playerFolderName.split(" - ", 1)[1]
+            else:
+                playerName = playerFolderName if playerFolderName else "Player"
+            bootsFolderName = f"k{calculatedBootsId:04d} - {playerName}"
+            glovesFolderName = f"g{calculatedBootsId:04d} - {playerName}"
+        else:
+            bootsFolderName = playerFolderName
+            glovesFolderName = playerFolderName
+
         # Check if face models were actually created (to determine hasFaceModel)
-        facesFolder = ijoin(destinationDirectory, "Faces")
-        if facesFolder is not None:
-            fmdlFiles = iglob(facesFolder, "*.fmdl")
-            if len(fmdlFiles) > 0:
-                hasFaceModel = True
+        facesParentFolder = ijoin(destinationDirectory, "Faces")
+        if facesParentFolder is not None:
+            playerFacesFolder = ijoin(facesParentFolder, playerFolderName)
+            if playerFacesFolder is not None:
+                fmdlFiles = iglob(playerFacesFolder, "*.fmdl")
+                if len(fmdlFiles) > 0:
+                    hasFaceModel = True
 
-        # Assign boots and gloves IDs if those folders were created
-        bootsFolder = ijoin(destinationDirectory, "Boots")
-        if bootsFolder is not None:
-            bootsId = bootsGlovesBaseId + relativePlayerId
+        # Check if boots models were actually created and assign boots ID
+        bootsParentFolder = ijoin(destinationDirectory, "Boots")
+        if bootsParentFolder is not None:
+            playerBootsFolder = ijoin(bootsParentFolder, bootsFolderName)
+            if playerBootsFolder is not None:
+                bootsFmdlFiles = iglob(playerBootsFolder, "*.fmdl")
+                if len(bootsFmdlFiles) > 0:
+                    hasBootsModel = True
+                    bootsId = bootsGlovesBaseId + relativePlayerId - 1
 
-        glovesFolder = ijoin(destinationDirectory, "Gloves")
-        if glovesFolder is not None:
-            glovesId = bootsGlovesBaseId + relativePlayerId
+        # Check if gloves models were actually created and assign gloves ID
+        glovesParentFolder = ijoin(destinationDirectory, "Gloves")
+        if glovesParentFolder is not None:
+            playerGlovesFolder = ijoin(glovesParentFolder, glovesFolderName)
+            if playerGlovesFolder is not None:
+                glovesFmdlFiles = iglob(playerGlovesFolder, "*.fmdl")
+                if len(glovesFmdlFiles) > 0:
+                    hasGlovesModel = True
+                    glovesId = bootsGlovesBaseId + relativePlayerId - 1
     else:
         # No face folder found for this player - they use an in-game face
         print("  No custom face folder found for player %02i, using in-game face" % relativePlayerId)
@@ -254,7 +338,8 @@ def convertPlayer(sourceDirectory, destinationDirectory, relativePlayerId, boots
     #
     # Convert save data
     #
-    newDestinationPlayerData = convertPlayerSaveData(sourcePlayerData, oldDestinationPlayerData, hasFaceModel, bootsId, glovesId)
+    newDestinationPlayerData = convertPlayerSaveData(sourcePlayerData, oldDestinationPlayerData, hasFaceModel,
+                                                     bootsId, glovesId, hasBootsModel, hasGlovesModel)
 
     return newDestinationPlayerData
 

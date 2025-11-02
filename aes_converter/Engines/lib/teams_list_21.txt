@@ -139,51 +139,51 @@ ID Name
 838 VGL 68
 839 VGL 69
 840 VGL 70
-841 Invitational 1
-842 Invitational 2
-843 Invitational 3
-844 Invitational 4
-845 Invitational 5
-846 Invitational 6
-847 Invitational 7
-848 Invitational 8
-849 Invitational 9
-850 Invitational 10
-851 Invitational 11
-852 Invitational 12
-853 Invitational 13
-854 Invitational 14
-855 pcg
-856 Invitational 16
-857 Invitational 17
-858 Invitational 18
-859 Invitational 19
-860 Invitational 20
-861 wah
-862 Invitational 22
-863 Invitational 23
-864 Invitational 24
-865 Invitational 25
-866 numbers
-867 Invitational 27
-868 Invitational 28
-869 Invitational 29
-870 lig
-871 Invitational 31
-872 rrat
-873 Invitational 33
-874 Invitational 34
-875 Invitational 35
-876 Invitational 36
-877 Invitational 37
-878 Invitational 38
-879 pink
-880 Invitational 40
-881 Invitational 41
-882 Invitational 42
-883 Invitational 43
-884 Invitational 44
-885 Invitational 45
+841 /ag/
+842 /v4m/
+843 /haha/
+844 /justice/
+845 /awdat/
+846 /baubau/
+847 /mint/
+848 /okfams/
+849 /flip/
+850 /fig/
+851 /chama/
+852 /same/
+853 /hag/
+854 /hfz/
+855 /hirys/
+856 /hlgg/
+857 /holox/
+858 /jidf/
+859 /lia/
+860 /lig/
+861 /manstars
+862 /mayo/
+863 /morig/
+864 /nasfaqg/
+865 /nepolabo
+866 /suuji/
+867 /pcg/
+868 /pcgia/
+869 /pink/
+870 /pyon/
+871 /rrat/
+872 /skynetfc
+873 /tactical
+874 /uuu/
+875 /vrt/
+876 /vsj+/
+877 /vtwbg/
+878 /wah/
+879 /warkop/
+880 /become/
+881 /wvt/
+882 /ybc/
+883 /pcgen3k/
+884 /brg/
+885 /numbers/
 886 Invitational 46
 887 Invitational 47
 888 Invitational 48

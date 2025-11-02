@@ -186,6 +186,12 @@ def convertMesh(modelMesh, modelFmdlBones, materialInstances):
 			FmdlFile.FmdlFile.Vector4(0, 0, 0, 1.0),
 		)
 
+	# Add extension header for fox3dfw_constant_srgb_ndr_solid shader
+	if fmdlMesh.materialInstance is not None:
+		shader = fmdlMesh.materialInstance.shader.lower()
+		if shader == 'fox3dfw_constant_srgb_ndr_solid':
+			fmdlMesh.extensionHeaders.add('Has-Antiblur-Meshes')
+
 	return fmdlMesh
 
 

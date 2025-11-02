@@ -233,7 +233,7 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
     sharedBootsFolderName = None
     sharedGlovesFolderName = None
     if bootsGlovesBaseId is not None and relativePlayerId is not None:
-        bootsId = bootsGlovesBaseId + relativePlayerId
+        bootsId = bootsGlovesBaseId + relativePlayerId - 1
         # Extract player name from playerFolderName (format: "XXX01 - PlayerName")
         if playerFolderName and " - " in playerFolderName:
             playerName = playerFolderName.split(" - ", 1)[1]

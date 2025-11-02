@@ -1943,19 +1943,11 @@ class FmdlFile:
 		fmdl = FmdlContainer()
 		
 		stringIndices = {}
-		print("addString")
 		self.addString(fmdl, stringIndices, '')
-		print("storeBones")
 		boneIndices = self.storeBones(fmdl, stringIndices, self.bones)
-		print("storeMaterialInstances")
-		print(stringIndices)
-		print(self.materialInstances)
 		materialInstanceIndices = self.storeMaterialInstances(fmdl, stringIndices, self.materialInstances)
-		print("storeMeshes")
 		meshIndices = self.storeMeshes(fmdl, self.meshes, boneIndices, materialInstanceIndices)
-		print("storeMeshGroups")
 		meshGroupIndices = self.storeMeshGroups(fmdl, stringIndices, self.meshGroups, meshIndices)
-		print("addExtensionHeaders")
 		self.addExtensionHeaders(fmdl, self, self.extensionHeaders, meshIndices, meshGroupIndices)
 		
 		# Unknown purpose
@@ -1974,5 +1966,4 @@ class FmdlFile:
 			if 1 not in fmdl.segment1Blocks:
 				fmdl.segment1Blocks[1] = bytearray()
 
-		print("writeFile")
 		fmdl.writeFile(filename)

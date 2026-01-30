@@ -309,19 +309,29 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
             materialElement = mtlMaterials[materialName]
             shader = materialElement.get('shader', '')
 
-            # Assign technique and shader based on shader type
-            if shader == 'Basic_C':
-                materialInstance.technique = 'fox3DDF_Blin'
-                materialInstance.shader = 'fox3ddf_blin'
-            elif shader == 'Shadeless':
-                materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR_Solid'
-                materialInstance.shader = 'fox3dfw_constant_srgb_ndr_solid'
-            elif shader == 'Basic_CNSR':
+            #Outlines on foxpes should be deferred for filesize optimisation reasons.
+            #If someone prefers a forward outline and the added filesize that comes from it
+            #instead they can make those changes manually.
+            ##A deferred outline also acts as an effective antiblur mesh, so the mesh it's
+            ##outlining doesn't need antiblur toggled on. Handling this is much more
+            ##involved so it's TODO for now
+            if('outline' in materialName):
                 materialInstance.technique = 'fox3DDF_Blin'
                 materialInstance.shader = 'fox3ddf_blin'
             else:
-                materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR_Solid'
-                materialInstance.shader = 'fox3dfw_constant_srgb_ndr_solid'
+                # Assign technique and shader based on shader type
+                if shader == 'Basic_C':
+                    materialInstance.technique = 'fox3DDF_Blin'
+                    materialInstance.shader = 'fox3ddf_blin'
+                elif shader == 'Shadeless':
+                    materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR_Solid'
+                    materialInstance.shader = 'fox3dfw_constant_srgb_ndr_solid'
+                elif shader == 'Basic_CNSR':
+                    materialInstance.technique = 'fox3DDF_Blin'
+                    materialInstance.shader = 'fox3ddf_blin'
+                else:
+                    materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR_Solid'
+                    materialInstance.shader = 'fox3dfw_constant_srgb_ndr_solid'
 
             # Extract MTL state properties for alpha/shadow flag calculation
             # Store as custom attributes on the materialInstance

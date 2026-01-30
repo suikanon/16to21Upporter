@@ -2,6 +2,7 @@ import os
 import shutil
 import struct
 import sys
+from pathlib import Path
 from PIL import Image
 
 from . import save16, save19, save21
@@ -542,7 +543,10 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
     sourceSave.load(sourceSaveFile)
 
     destinationSave = save21.SaveFile()
-    destinationSave.load(os.path.join(os.path.dirname(os.path.realpath(__file__)), "EDIT00000000_21"))
+    if(os.path.isfile(os.path.join(Path(destinationDirectory).parent.absolute(), "EDIT00000000"))):
+        destinationSave.load(os.path.join(Path(destinationDirectory).parent.absolute(), "EDIT00000000"))
+    else:    
+        destinationSave.load(os.path.join(os.path.dirname(os.path.realpath(__file__)), "EDIT00000000_21"))
 
     sourcePlayers = save16.loadPlayers(sourceSave.payload)
     oldDestinationPlayers = save21.loadPlayers(destinationSave.payload)
@@ -585,7 +589,7 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
     print("  Creating save")
     save21.savePlayers(destinationSave.payload, newDestinationPlayers)
     print("saving save")
-    destinationSave.save(os.path.join(destinationDirectory, "EDIT00000000"))
+    destinationSave.save(os.path.join(Path(destinationDirectory).parent.absolute(), "EDIT00000000"))
 
 
 if __name__ == "__main__":

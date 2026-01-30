@@ -127,20 +127,23 @@ def parseFaceXml(directory):
         for modelElement in root.findall('.//model'):
             modelType = modelElement.get('type')
             modelPath = modelElement.get('path')
+            modelMtl = modelElement.get("material")
 
-            if modelType and modelPath:
+            if modelType and modelPath and modelMtl:
                 # Extract filename from path (handle wildcards and paths)
                 # Path formats: "./face_high_*.model" or "./oral_body.model"
                 modelPath = modelPath.replace('\\', '/')
+                modelMtl = modelMtl.replace('\\', '/')
                 modelFilename = os.path.basename(modelPath)
+                mtlFilename = os.path.basename(modelMtl)
 
                 # Handle wildcards - store pattern for matching
                 if '*' in modelFilename:
                     # Store the pattern for later matching
-                    modelTypeMap[modelFilename.lower()] = modelType
+                    modelTypeMap[modelFilename.lower()] = [modelType, mtlFilename]
                 else:
                     # Exact filename
-                    modelTypeMap[modelFilename.lower()] = modelType
+                    modelTypeMap[modelFilename.lower()] = [modelType, mtlFilename]
 
         return modelTypeMap
 
@@ -277,9 +280,13 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
                 if fileSize > 990:
                     print(f"face_high_win32.model is {fileSize} bytes, will convert to hair_high.fmdl")
                     hairHighModel = modelFile
-                    modelMetadata[modelFile] = {'type': 'hair', 'category': 'faces'}
+                    modelMetadata[modelFile] = {'type': 'hair', 'category': 'faces', 'mtl': None}
                 else:
                     print(f"skipping face_high_win32.model ({fileSize} bytes <= 990)")
+                continue
+            elif baseName == 'hair_high_win32':
+                modelMetadata[modelFile] = {'type': 'hair', 'category': 'faces', 'mtl': "hair.mtl"}
+                faceModels.append(modelFile)
                 continue
 
             # Determine category and type
@@ -290,11 +297,11 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
                 # Use face.xml for categorization
                 modelType = matchModelToType(fullBaseName, modelTypeMap)
                 if modelType:
-                    category = categorizeModelByType(modelType)
+                    category = categorizeModelByType(modelType[0])
                     if category:
-                        print(f"face.xml: {fullBaseName} has type '{modelType}' -> {category}")
+                        print(f"face.xml: {fullBaseName} has type '{modelType[0]}' -> {category}")
                     else:
-                        print(f"WARNING: Unknown model type '{modelType}' for {fullBaseName}, using filename fallback")
+                        print(f"WARNING: Unknown model type '{modelType[0]}' for {fullBaseName}, using filename fallback")
 
             # Fallback to filename-based categorization if face.xml didn't provide a category
             if category is None:
@@ -305,9 +312,14 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
                 else:
                     # Everything else goes to boots (parts/uniform)
                     category = 'boots'
-
+                mtl = "materials.mtl"
+                type = None
+            else:
+                mtl = modelType[1]
+                type = modelType[0]
+            
             # Store metadata for this model
-            modelMetadata[modelFile] = {'type': modelType, 'category': category}
+            modelMetadata[modelFile] = {'type': type, 'category': category, 'mtl': mtl}
 
             # Add to appropriate list
             if category == 'faces':
@@ -368,18 +380,19 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
     if hairHighModel is not None:
         try:
             modelFileObj = model2fmdl.loadModel(hairHighModel)
-            outputFmdl = os.path.join(facesFolder, "hair_high.fmdl")
-            print("converting face_high_win32.model to hair_high.fmdl")
+            outputFmdl = os.path.join(facesFolder, "face_high.fmdl")
+            print("converting face_high_win32.model to face_high.fmdl")
             # Get metadata for this model
             metadata = modelMetadata.get(hairHighModel, {})
             fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(hairHighModel),
                                            modelType=metadata.get('type'),
-                                           modelCategory=metadata.get('category'))
-            print("saving hair_high.fmdl")
+                                           modelCategory=metadata.get('category'),
+                                           mtl=metadata.get('mtl'))
+            print("saving face_high.fmdl")
             model2fmdl.saveFmdl(fmdl, outputFmdl)
-            convertedFaceFiles.append("hair_high.fmdl")
+            convertedFaceFiles.append("face_high.fmdl")
         except Exception as e:
-            print(f"WARNING: Failed to convert hair_high model: {e}")
+            print(f"WARNING: Failed to convert face_high model: {e}")
 
     # Process regular face models with intelligent naming
     if len(faceModels) == 1:
@@ -394,7 +407,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
             metadata = modelMetadata.get(modelFile, {})
             fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(modelFile),
                                            modelType=metadata.get('type'),
-                                           modelCategory=metadata.get('category'))
+                                           modelCategory=metadata.get('category'),
+                                           mtl=metadata.get('mtl'))
             print("saving face_high.fmdl")
             model2fmdl.saveFmdl(fmdl, outputFmdl)
             convertedFaceFiles.append("face_high.fmdl")
@@ -437,7 +451,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
             metadata = modelMetadata.get(faceModel, {})
             fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(faceModel),
                                            modelType=metadata.get('type'),
-                                           modelCategory=metadata.get('category'))
+                                           modelCategory=metadata.get('category'),
+                                           mtl=metadata.get('mtl'))
             print("saving face_high.fmdl")
             model2fmdl.saveFmdl(fmdl, outputFmdl)
             convertedFaceFiles.append("face_high.fmdl")
@@ -454,7 +469,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
             metadata = modelMetadata.get(hairModel, {})
             fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(hairModel),
                                            modelType=metadata.get('type'),
-                                           modelCategory=metadata.get('category'))
+                                           modelCategory=metadata.get('category'),
+                                           mtl=metadata.get('mtl'))
             print("saving hair_high.fmdl")
             model2fmdl.saveFmdl(fmdl, outputFmdl)
             convertedFaceFiles.append("hair_high.fmdl")
@@ -500,7 +516,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
             metadata = modelMetadata.get(faceModel, {})
             fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(faceModel),
                                            modelType=metadata.get('type'),
-                                           modelCategory=metadata.get('category'))
+                                           modelCategory=metadata.get('category'),
+                                           mtl=metadata.get('mtl'))
             print("saving face_high.fmdl")
             model2fmdl.saveFmdl(fmdl, outputFmdl)
             convertedFaceFiles.append("face_high.fmdl")
@@ -517,7 +534,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
             metadata = modelMetadata.get(hairModel, {})
             fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(hairModel),
                                            modelType=metadata.get('type'),
-                                           modelCategory=metadata.get('category'))
+                                           modelCategory=metadata.get('category'),
+                                           mtl=metadata.get('mtl'))
             print("saving hair_high.fmdl")
             model2fmdl.saveFmdl(fmdl, outputFmdl)
             convertedFaceFiles.append("hair_high.fmdl")
@@ -694,7 +712,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
                 metadata = modelMetadata.get(modelFile, {})
                 fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(modelFile),
                                                modelType=metadata.get('type'),
-                                               modelCategory=metadata.get('category'))
+                                               modelCategory=metadata.get('category'),
+                                           mtl=metadata.get('mtl'))
                 print(f"saving glove model: {baseName}.model -> {outputName}.fmdl")
                 model2fmdl.saveFmdl(fmdl, outputFmdl)
 

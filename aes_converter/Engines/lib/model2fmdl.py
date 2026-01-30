@@ -411,24 +411,24 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
             else:
                 materialInstance.textures = []
         else:
-			# Material not found in .mtl file, use default values
-			print(f"WARNING: Material '{materialName}' not found in .mtl files, using defaults")
-			materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR_Solid'
-			materialInstance.shader = 'fox3dfw_constant_srgb_ndr_solid'
-			materialInstance.textures = []
-			# Default MTL properties
-			materialInstance.mtl_twosided = False
-			materialInstance.mtl_alphablend = False
+            # Material not found in .mtl file, use default values
+            print(f"WARNING: Material '{materialName}' not found in .mtl files, using defaults")
+            materialInstance.technique = 'fox3DFW_ConstantSRGB_NDR_Solid'
+            materialInstance.shader = 'fox3dfw_constant_srgb_ndr_solid'
+            materialInstance.textures = []
+            # Default MTL properties
+            materialInstance.mtl_twosided = False
+            materialInstance.mtl_alphablend = False
 
-		#Blin should also have a MatParamIndex_0
+        #Blin should also have a MatParamIndex_0
         if(materialInstance.technique == 'fox3DDF_Blin'):
             materialInstance.parameters = [('MatParamIndex_0', (0.0, 0.0, 0.0, 0.0))]
         else:
             materialInstance.parameters = []
 
-		materialInstances.append(materialInstance)
+        materialInstances.append(materialInstance)
 
-	return materialInstances
+    return materialInstances
 
 
 def createMeshGroups(model, fmdlMeshes):

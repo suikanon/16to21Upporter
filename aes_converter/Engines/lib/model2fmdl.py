@@ -383,6 +383,21 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
 
                 # Add texture to materialInstance with 'Base_Tex_SRGB' key
                 materialInstance.textures = [('Base_Tex_SRGB', texture)]
+                #If we're using blin we also need normal and specular maps. Set them to
+                #the neutral defaults.
+                ##TODO: some models will have their own normal and specular maps. Add
+                ##support for using those instead. Keep in mind this is not as straightforward
+                ##as just grabbing the textures for Normal and Specular in the mtl, at least
+                ##for normal maps the texture channel order is different
+                if(materialInstance.technique == 'fox3DDF_Blin'):
+                    nrmTex = FmdlFile.FmdlFile.Texture()
+                    nrmTex.filename = "dummy_nrm.dds"
+                    nrmTex.directory = '/Assets/pes16/model/character/common/sourceimages/'
+                    srmTex = FmdlFile.FmdlFile.Texture()
+                    srmTex.filename = "dummy_srm.dds"
+                    srmTex.directory = '/Assets/pes16/model/character/common/sourceimages/'
+                    materialInstance.textures.append(('NormalMap_Tex_NRM', nrmTex))
+                    materialInstance.textures.append(('SpecularMap_Tex_LIN', srmTex))
             else:
                 materialInstance.textures = []
         else:
@@ -395,8 +410,11 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
 			materialInstance.mtl_twosided = False
 			materialInstance.mtl_alphablend = False
 
-		# Parameters field is left empty as per requirements
-		materialInstance.parameters = []
+		#Blin should also have a MatParamIndex_0
+        if(materialInstance.technique == 'fox3DDF_Blin'):
+            materialInstance.parameters = [('MatParamIndex_0', (0.0, 0.0, 0.0, 0.0))]
+        else:
+            materialInstance.parameters = []
 
 		materialInstances.append(materialInstance)
 

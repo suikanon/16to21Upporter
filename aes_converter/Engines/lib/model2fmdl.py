@@ -363,7 +363,7 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
                 # Special case: uniform type models use standard uniform texture path
                 if modelType and modelType.lower() == 'uniform':
                     texture.directory = '/Assets/pes16/model/character/uniform/texture/'
-                    texture.filename = 'u0123p1.ftex'
+                    texture.filename = 'u0123p0.ftex'
                 # Check if texture path references Common folder
                 elif texturePath.startswith('model/character/uniform/common'):
                     # Common folder texture

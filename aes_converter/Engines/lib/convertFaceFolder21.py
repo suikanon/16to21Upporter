@@ -271,66 +271,67 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
         modelFiles = iglob(directory, "*.model")
 
         for modelFile in modelFiles:
-            baseName = os.path.basename(modelFile)[:-6].lower()  # Remove .model extension
-            fullBaseName = os.path.basename(modelFile).lower()  # With .model extension
+            if not("edithair" in modelFile or "hair_d_win32" in modelFile):
+                baseName = os.path.basename(modelFile)[:-6].lower()  # Remove .model extension
+                fullBaseName = os.path.basename(modelFile).lower()  # With .model extension
 
-            # Special handling for face_high_win32.model
-            if baseName == 'face_high_win32':
-                fileSize = os.path.getsize(modelFile)
-                if fileSize > 990:
-                    print(f"face_high_win32.model is {fileSize} bytes, will convert to hair_high.fmdl")
-                    hairHighModel = modelFile
-                    modelMetadata[modelFile] = {'type': 'hair', 'category': 'faces', 'mtl': None}
-                else:
-                    print(f"skipping face_high_win32.model ({fileSize} bytes <= 990)")
-                continue
-            elif baseName == 'hair_high_win32':
-                modelMetadata[modelFile] = {'type': 'hair', 'category': 'faces', 'mtl': "hair.mtl"}
-                faceModels.append(modelFile)
-                continue
-
-            # Determine category and type
-            category = None
-            modelType = None
-
-            if useFaceXml:
-                # Use face.xml for categorization
-                modelType = matchModelToType(fullBaseName, modelTypeMap)
-                if modelType:
-                    category = categorizeModelByType(modelType[0])
-                    if category:
-                        print(f"face.xml: {fullBaseName} has type '{modelType[0]}' -> {category}")
+                # Special handling for face_high_win32.model
+                if baseName == 'face_high_win32':
+                    fileSize = os.path.getsize(modelFile)
+                    if fileSize > 990:
+                        print(f"face_high_win32.model is {fileSize} bytes, will convert to hair_high.fmdl")
+                        hairHighModel = modelFile
+                        modelMetadata[modelFile] = {'type': 'hair', 'category': 'faces', 'mtl': None}
                     else:
-                        print(f"WARNING: Unknown model type '{modelType[0]}' for {fullBaseName}, using filename fallback")
+                        print(f"skipping face_high_win32.model ({fileSize} bytes <= 990)")
+                    continue
+                elif baseName == 'hair_high_win32':
+                    modelMetadata[modelFile] = {'type': 'hair', 'category': 'faces', 'mtl': "hair.mtl"}
+                    faceModels.append(modelFile)
+                    continue
 
-            # Fallback to filename-based categorization if face.xml didn't provide a category
-            if category is None:
-                if 'face' in baseName or 'hair' in baseName:
-                    category = 'faces'
-                elif 'glove' in baseName or 'hand' in baseName:
-                    category = 'gloves'
+                # Determine category and type
+                category = None
+                modelType = None
+
+                if useFaceXml:
+                    # Use face.xml for categorization
+                    modelType = matchModelToType(fullBaseName, modelTypeMap)
+                    if modelType:
+                        category = categorizeModelByType(modelType[0])
+                        if category:
+                            print(f"face.xml: {fullBaseName} has type '{modelType[0]}' -> {category}")
+                        else:
+                            print(f"WARNING: Unknown model type '{modelType[0]}' for {fullBaseName}, using filename fallback")
+
+                # Fallback to filename-based categorization if face.xml didn't provide a category
+                if category is None:
+                    if 'face' in baseName or 'hair' in baseName:
+                        category = 'faces'
+                    elif 'glove' in baseName or 'hand' in baseName:
+                        category = 'gloves'
+                    else:
+                        # Everything else goes to boots (parts/uniform)
+                        category = 'boots'
+                    mtl = "materials.mtl"
+                    type = None
                 else:
-                    # Everything else goes to boots (parts/uniform)
-                    category = 'boots'
-                mtl = "materials.mtl"
-                type = None
-            else:
-                mtl = modelType[1]
-                type = modelType[0]
-            
-            # Store metadata for this model
-            modelMetadata[modelFile] = {'type': type, 'category': category, 'mtl': mtl}
+                    mtl = modelType[1]
+                    type = modelType[0]
+                
+                # Store metadata for this model
+                modelMetadata[modelFile] = {'type': type, 'category': category, 'mtl': mtl}
 
-            # Add to appropriate list
-            if category == 'faces':
-                print(f"adding face: {baseName}")
-                faceModels.append(modelFile)
-            elif category == 'gloves':
-                print(f"adding glove: {baseName}")
-                gloveModels.append(modelFile)
-            elif category == 'boots':
-                print(f"adding boots: {baseName}")
-                bootsModels.append(modelFile)
+                # Add to appropriate list
+                if category == 'faces':
+                    print(f"adding face: {baseName}")
+                    faceModels.append(modelFile)
+                elif category == 'gloves':
+                    print(f"adding glove: {baseName}")
+                    gloveModels.append(modelFile)
+                elif category == 'boots':
+                    print(f"adding boots: {baseName}")
+                    bootsModels.append(modelFile)
 
         # Look for face_diff.bin
         faceDiffFile = ijoin(directory, "face_diff.bin")

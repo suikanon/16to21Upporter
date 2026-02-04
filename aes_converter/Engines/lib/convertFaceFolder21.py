@@ -251,7 +251,6 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
     gloveModels = []  # gloveL/gloveR type models
     faceDiffBinFilename = None
     portraitFilename = None
-    hasFaceHighWin32Only = False  # Track if we only have face_high_win32.model (small size)
     faceHighModel = None  # Track face_high_win32.model if size > 990 bytes
     hairHighModel = None  # Track hair_high_win32.model
 
@@ -343,26 +342,6 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
         portraitFile = ijoin(directory, "portrait.dds")
         if portraitFile is not None and portraitFilename is None:
             portraitFilename = portraitFile
-
-    # Check if we only have small face_high_win32.model (no other face models)
-    # We still need to create the Faces folder in this case
-    for directory in sourceDirectories:
-        allFaceTypeModels = []
-        modelFiles = iglob(directory, "*.model")
-        for modelFile in modelFiles:
-            baseName = os.path.basename(modelFile)[:-6].lower()
-            if 'face' in baseName or 'hair' in baseName:
-                # Check if it's a small face_high_win32
-                if baseName == 'face_high_win32':
-                    fileSize = os.path.getsize(modelFile)
-                    if fileSize <= 990:
-                        allFaceTypeModels.append(baseName)
-                else:
-                    allFaceTypeModels.append(baseName)
-
-        # If we have small face_high_win32 but no other face models, set the flag
-        if 'face_high_win32' in allFaceTypeModels and len(allFaceTypeModels) == 1:
-            hasFaceHighWin32Only = True
 
     # Always create a Faces folder
     # Create Faces/XXX01 - PlayerName/ subfolder

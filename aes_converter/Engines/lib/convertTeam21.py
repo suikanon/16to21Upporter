@@ -553,7 +553,7 @@ def convertTeam(sourceDirectory, sourceSaveFile, destinationDirectory):
     newDestinationPlayers = {}
 
     for i in range(23):
-        print("  Converting player %02i" % (i + 1))
+        print("\n  Converting player %02i" % (i + 1))
         sourcePlayerId = sourceTeamId * 100 + i + 1
         destinationPlayerId = destinationTeamId * 100 + i + 1
 

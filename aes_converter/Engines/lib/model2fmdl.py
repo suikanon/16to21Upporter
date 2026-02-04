@@ -33,6 +33,7 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
         if modelMesh.vertexFields.hasTangent:
             fmdlVertex.tangent = FmdlFile.FmdlFile.Vector4(
                 modelVertex.tangent.x,
+                
                 modelVertex.tangent.y,
                 modelVertex.tangent.z,
                 1.0
@@ -51,10 +52,19 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
 
             for (boneIndex, weight) in modelVertex.boneMapping.items():
                 # boneIndex is an integer - get the actual bone object from the mesh's bone group
-                modelBone = modelMesh.boneGroup.bones[boneIndex]
-                # Now use the bone object to look up the corresponding FMDL bone
-                fmdlBone = modelFmdlBones[modelBone]
-                fmdlVertex.boneMapping[fmdlBone] = weight
+                ##With ancient face_high_win32 templates boneIndex can be higher here and the assignment would error out
+                ##Probably caused by the old .model plugin, for now set these meshes to not have bone mapping at all
+                ###TODO: I guess this should be a static (nonexistent) bone instead of whatever happens to be at
+                ###bones[0]. Figure out how to do that once more critical issues are fixed.
+                ###I checked in-game and PES does still respect the z-axis position being way underground, so this works OK for now
+                if(boneIndex > len(modelMesh.boneGroup.bones) - 1):
+                    fmdlVertex.boneMapping = None
+                    boneMapping = False
+                else:
+                    modelBone = modelMesh.boneGroup.bones[boneIndex]
+                    fmdlBone = modelFmdlBones[modelBone]
+                    fmdlVertex.boneMapping[fmdlBone] = weight
+                    boneMapping = True
 
         fmdlVertices.append(fmdlVertex)
         modelFmdlVertices[modelVertex] = fmdlVertex
@@ -68,7 +78,7 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
             modelFmdlVertices[modelFace.vertices[0]]
         ))
 
-    return (fmdlVertices, fmdlFaces)
+    return (fmdlVertices, fmdlFaces, boneMapping)
 
 
 def convertMesh(modelMesh, modelFmdlBones, materialInstances):
@@ -88,7 +98,9 @@ def convertMesh(modelMesh, modelFmdlBones, materialInstances):
     fmdlMesh.vertexFields.highPrecisionUv = False
 
     # Convert geometry
-    (fmdlMesh.vertices, fmdlMesh.faces) = convertMeshGeometry(modelMesh, modelFmdlBones)
+    ##Edge cases where ancient template models have bad bone mapping information need 
+    ##the fmdlMesh.vertexFields.hasBoneMapping assignment here, see convertMeshGeometry above for more info
+    (fmdlMesh.vertices, fmdlMesh.faces, fmdlMesh.vertexFields.hasBoneMapping) = convertMeshGeometry(modelMesh, modelFmdlBones)
 
     # Set up bone group
     fmdlMesh.boneGroup = FmdlFile.FmdlFile.BoneGroup()

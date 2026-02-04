@@ -695,14 +695,17 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
         for modelFile in gloveModels:
             baseName = os.path.basename(modelFile)[:-6]  # Remove .model
 
-            # Determine output name based on suffix
-            # Files ending with _l become glove_l.fmdl, files ending with _r become glove_r.fmdl
-            if baseName.lower().endswith('_l'):
+            # Determine output name based on model type
+            # If unable to determine type/name, warn the user and default to the .model file's original name
+            metadata = modelMetadata.get(modelFile, {})
+            type = metadata.get('type')
+            if(type == "gloveL" or type == "handL" or baseName == "glovel"):
                 outputName = "glove_l"
-            elif baseName.lower().endswith('_r'):
+            elif(type == "gloveR" or type == "handR" or baseName == "glover"):
                 outputName = "glove_r"
             else:
                 outputName = baseName
+                print(f"WARNING: Failed to find a type for glove model: {baseName}.model, defaulting to {baseName}.fmdl")
 
             try:
                 modelFileObj = model2fmdl.loadModel(modelFile)
@@ -710,7 +713,7 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
                 # Get metadata for this model
                 metadata = modelMetadata.get(modelFile, {})
                 fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(modelFile),
-                                               modelType=metadata.get('type'),
+                                               modelType=type,
                                                modelCategory=metadata.get('category'),
                                            mtl=metadata.get('mtl'))
                 print(f"saving glove model: {baseName}.model -> {outputName}.fmdl")

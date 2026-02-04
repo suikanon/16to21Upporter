@@ -252,7 +252,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
     faceDiffBinFilename = None
     portraitFilename = None
     hasFaceHighWin32Only = False  # Track if we only have face_high_win32.model (small size)
-    hairHighModel = None  # Track face_high_win32.model if size > 990 bytes
+    faceHighModel = None  # Track face_high_win32.model if size > 990 bytes
+    hairHighModel = None  # Track hair_high_win32.model
 
     # Dictionary to store model type and category for each model file path
     modelMetadata = {}  # modelFilePath -> {'type': str, 'category': str}
@@ -279,15 +280,15 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
                 if baseName == 'face_high_win32':
                     fileSize = os.path.getsize(modelFile)
                     if fileSize > 990:
-                        print(f"face_high_win32.model is {fileSize} bytes, will convert to hair_high.fmdl")
-                        hairHighModel = modelFile
+                        print(f"face_high_win32.model is {fileSize} bytes, will convert to face_high.fmdl")
+                        faceHighModel = modelFile
                         modelMetadata[modelFile] = {'type': 'hair', 'category': 'faces', 'mtl': None}
                     else:
                         print(f"skipping face_high_win32.model ({fileSize} bytes <= 990)")
                     continue
                 elif baseName == 'hair_high_win32':
+                    hairHighModel = modelFile
                     modelMetadata[modelFile] = {'type': 'hair', 'category': 'faces', 'mtl': "hair.mtl"}
-                    faceModels.append(modelFile)
                     continue
 
                 # Determine category and type
@@ -377,15 +378,15 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
     # Track converted files for face.fpk.xml
     convertedFaceFiles = []
 
-    # Handle large face_high_win32.model separately (always becomes hair_high.fmdl)
-    if hairHighModel is not None:
+    # Handle large face_high_win32.model separately (always becomes face_high.fmdl)
+    if faceHighModel is not None:
         try:
-            modelFileObj = model2fmdl.loadModel(hairHighModel)
+            modelFileObj = model2fmdl.loadModel(faceHighModel)
             outputFmdl = os.path.join(facesFolder, "face_high.fmdl")
             print("converting face_high_win32.model to face_high.fmdl")
             # Get metadata for this model
-            metadata = modelMetadata.get(hairHighModel, {})
-            fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(hairHighModel),
+            metadata = modelMetadata.get(faceHighModel, {})
+            fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(faceHighModel),
                                            modelType=metadata.get('type'),
                                            modelCategory=metadata.get('category'),
                                            mtl=metadata.get('mtl'))
@@ -394,6 +395,24 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
             convertedFaceFiles.append("face_high.fmdl")
         except Exception as e:
             print(f"WARNING: Failed to convert face_high model: {e}")
+            
+    # Handle hair_high_win32.model separately (always becomes hair_high.fmdl)
+    if hairHighModel is not None:
+        try:
+            modelFileObj = model2fmdl.loadModel(hairHighModel)
+            outputFmdl = os.path.join(facesFolder, "hair_high.fmdl")
+            print("converting hair_high_win32.model to hair_high.fmdl")
+            # Get metadata for this model
+            metadata = modelMetadata.get(hairHighModel, {})
+            fmdl = model2fmdl.convertModel(modelFileObj, os.path.dirname(hairHighModel),
+                                           modelType=metadata.get('type'),
+                                           modelCategory=metadata.get('category'),
+                                           mtl=metadata.get('mtl'))
+            print("saving hair_high.fmdl")
+            model2fmdl.saveFmdl(fmdl, outputFmdl)
+            convertedFaceFiles.append("hair_high.fmdl")
+        except Exception as e:
+            print(f"WARNING: Failed to convert hair_high model: {e}")
 
     # Process regular face models with intelligent naming
     if len(faceModels) == 1:
@@ -578,8 +597,8 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
         faceTexturesNeeded.update(textures)
 
     # Get textures from hair_high model (large face_high_win32)
-    if hairHighModel is not None:
-        textures = getTexturesUsedByModel(hairHighModel)
+    if faceHighModel is not None:
+        textures = getTexturesUsedByModel(faceHighModel)
         faceTexturesNeeded.update(textures)
 
     # Copy only the textures that are actually used

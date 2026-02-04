@@ -304,11 +304,16 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
                         category = categorizeModelByType(modelType[0])
                         if category:
                             print(f"face.xml: {fullBaseName} has type '{modelType[0]}' -> {category}")
+                            mtl = modelType[1]
+                            type = modelType[0]
                         else:
-                            print(f"WARNING: Unknown model type '{modelType[0]}' for {fullBaseName}, using filename fallback")
+                            print(f"WARNING: Unknown model type '{modelType[0]}' for {fullBaseName}, skipping model")
+                            continue
+                    else:
+                        continue
 
-                # Fallback to filename-based categorization if face.xml didn't provide a category
-                if category is None:
+                else:
+                    # Fallback to filename-based categorization if face.xml didn't provide a category
                     if 'face' in baseName or 'hair' in baseName:
                         category = 'faces'
                     elif 'glove' in baseName or 'hand' in baseName:
@@ -318,9 +323,6 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
                         category = 'boots'
                     mtl = "materials.mtl"
                     type = None
-                else:
-                    mtl = modelType[1]
-                    type = modelType[0]
                 
                 # Store metadata for this model
                 modelMetadata[modelFile] = {'type': type, 'category': category, 'mtl': mtl}

@@ -8,6 +8,7 @@ from xml.etree import ElementTree
 from .util import ijoin, iglob
 from . import model2fmdl, material
 from . import FmdlFile, ModelFile
+from .zlib_plus import unzlib_file
 
 
 def getTexturesUsedByModel(modelFile):
@@ -44,6 +45,7 @@ def getTexturesUsedByModel(modelFile):
         for mtlFile in mtlFiles:
             try:
                 # Parse the MTL XML
+                unzlib_file(mtlFile)
                 tree = ElementTree.parse(mtlFile)
                 root = tree.getroot()
 
@@ -118,6 +120,7 @@ def parseFaceXml(directory):
         return None
 
     try:
+        unzlib_file(faceXmlPath)
         tree = ElementTree.parse(faceXmlPath)
         root = tree.getroot()
 

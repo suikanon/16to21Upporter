@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from . import FmdlAntiBlur, FmdlFile, FmdlMeshSplitting, FmdlSplitVertexEncoding
 from . import ModelFile, ModelMeshSplitting, ModelSplitVertexEncoding
 from . import PesSkeletonData, Skeleton
+from .zlib_plus import unzlib_file
 
 
 def convertMeshGeometry(modelMesh, modelFmdlBones):
@@ -298,6 +299,7 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
     mtlMaterials = {}  # name -> material XML element
     for mtlFile in mtlFiles:
         try:
+            unzlib_file(mtlFile)
             tree = ET.parse(mtlFile)
             root = tree.getroot()
 

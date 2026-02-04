@@ -13,7 +13,7 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
     """
     fmdlVertices = []
     modelFmdlVertices = {}  # For face conversion
-
+    
     for modelVertex in modelMesh.vertices:
         fmdlVertex = FmdlFile.FmdlFile.Vertex()
 
@@ -59,12 +59,11 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
                 ###I checked in-game and PES does still respect the z-axis position being way underground, so this works OK for now
                 if(boneIndex > len(modelMesh.boneGroup.bones) - 1):
                     fmdlVertex.boneMapping = None
-                    boneMapping = False
+                    modelMesh.vertexFields.hasBoneMapping = False
                 else:
                     modelBone = modelMesh.boneGroup.bones[boneIndex]
                     fmdlBone = modelFmdlBones[modelBone]
                     fmdlVertex.boneMapping[fmdlBone] = weight
-                    boneMapping = True
 
         fmdlVertices.append(fmdlVertex)
         modelFmdlVertices[modelVertex] = fmdlVertex
@@ -78,7 +77,7 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
             modelFmdlVertices[modelFace.vertices[0]]
         ))
 
-    return (fmdlVertices, fmdlFaces, boneMapping)
+    return (fmdlVertices, fmdlFaces, modelMesh.vertexFields.hasBoneMapping)
 
 
 def convertMesh(modelMesh, modelFmdlBones, materialInstances):

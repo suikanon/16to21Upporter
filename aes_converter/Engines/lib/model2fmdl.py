@@ -318,23 +318,47 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
                 if filename.lower().endswith('.mtl'):
                     mtlFiles.append(os.path.join(sourceDirectory, filename))
     else:
-        mtlFiles.append(os.path.join(sourceDirectory, mtl))
+        #If the MTL file was in the Common folder we need to set the path correctly
+        if("_common_" in mtl):
+            rootDirectory = os.path.dirname(sourceDirectory)
+            mtlFiles.append(os.path.join(rootDirectory, "Common", mtl))
+        else:    
+            mtlFiles.append(os.path.join(sourceDirectory, mtl))
 
     # Parse all .mtl files to build a material database
     mtlMaterials = {}  # name -> material XML element
     for mtlFile in mtlFiles:
-        try:
-            unzlib_file(mtlFile)
-            tree = ET.parse(mtlFile)
-            root = tree.getroot()
+        #If the MTL file was in the Common folder we also need to carry that information over
+        #to the material parsing section so the texture path will be set correctly
+        if("_common_" in mtlFile):
+            mtlFile = mtlFile.replace("_common_", "")
+            try:
+                unzlib_file(mtlFile)
+                tree = ET.parse(mtlFile)
+                root = tree.getroot()
 
-            # Find all <material> elements
-            for materialElement in root.findall('material'):
-                materialName = materialElement.get('name')
-                if materialName:
-                    mtlMaterials[materialName] = materialElement
-        except Exception as e:
-            print(f"WARNING: Failed to parse .mtl file {mtlFile}: {e}")
+                # Find all <material> elements
+                for materialElement in root.findall('material'):
+                    materialName = materialElement.get('name')
+                    if materialName:
+                        #The True means this material is from a Common folder MTL
+                        mtlMaterials[materialName] = [materialElement, True]
+            except Exception as e:
+                print(f"WARNING: Failed to parse .mtl file {mtlFile}: {e}")
+        else:
+            try:
+                unzlib_file(mtlFile)
+                tree = ET.parse(mtlFile)
+                root = tree.getroot()
+
+                # Find all <material> elements
+                for materialElement in root.findall('material'):
+                    materialName = materialElement.get('name')
+                    if materialName:
+                        #The True means this material is not from a Common folder MTL
+                        mtlMaterials[materialName] = [materialElement, False]
+            except Exception as e:
+                print(f"WARNING: Failed to parse .mtl file {mtlFile}: {e}")
 
     # Process each material from the ModelFile
     for materialKey in model.materials:
@@ -344,7 +368,7 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
 
         # Check if material exists in .mtl files
         if materialName in mtlMaterials:
-            materialElement = mtlMaterials[materialName]
+            materialElement = mtlMaterials[materialName][0]
             shader = materialElement.get('shader', '')
 
             #Outlines on foxpes should be deferred for filesize optimisation reasons.
@@ -402,8 +426,9 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
                 if modelType and modelType.lower() == 'uniform':
                     texture.directory = '/Assets/pes16/model/character/uniform/texture/'
                     texture.filename = 'u0123p0.ftex'
-                # Check if texture path references Common folder
-                elif texturePath.startswith('model/character/uniform/common'):
+                # Check if texture path references Common folder or the MTL the material came from
+                # was from the Common folder
+                elif(texturePath.startswith('model/character/uniform/common') or mtlMaterials[materialName][1]):
                     # Common folder texture
                     texture.directory = '/Assets/pes16/model/character/common/000/sourceimages/'
                     texture.filename = os.path.basename(texturePath)

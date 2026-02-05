@@ -137,8 +137,20 @@ def parseFaceXml(directory):
                 # Path formats: "./face_high_*.model" or "./oral_body.model"
                 modelPath = modelPath.replace('\\', '/')
                 modelMtl = modelMtl.replace('\\', '/')
-                modelFilename = os.path.basename(modelPath)
-                mtlFilename = os.path.basename(modelMtl)
+                
+                #This is a workaround for handling models in the common folder. A smart way
+                #would be to re-work the conversion logic to use modelTypeMap for everything instead
+                #of scanning the face folder for .model files. That's likely the better way to do things in
+                #the future anyway. For now I'm in a hurry to get this done though so let's just label
+                #common folder models and MTLs so we can spot them later
+                if("/common/" in modelPath):
+                    modelFilename = "_common_" + os.path.basename(modelPath)
+                else:
+                    modelFilename = os.path.basename(modelPath)
+                if("/common/" in modelMtl):
+                    mtlFilename = "_common_" + os.path.basename(modelMtl)
+                else:
+                    mtlFilename = os.path.basename(modelMtl)
 
                 # Handle wildcards - store pattern for matching
                 if '*' in modelFilename:
@@ -338,6 +350,45 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
                     print(f"adding boots: {baseName}")
                     bootsModels.append(modelFile)
 
+        #Go through modelTypeMap looking for models loaded from the Common folder instead,
+        #since just pattern matching the face folder won't catch those
+        if useFaceXml:
+            for model in modelTypeMap:
+                if("_common_" in model):
+                    category = None
+
+                    # Use face.xml for categorization
+                    type = modelTypeMap[model][0]
+                    mtl = modelTypeMap[model][1]
+                    #Dumb replace the wildcard with _win32
+                    model = model.replace("_*", "_win32")
+                    if type:
+                        category = categorizeModelByType(type)
+                        if category:
+                            print(f"face.xml: {model.replace("_common_", "/Common/")} has type '{type}' -> {category}")
+                        else:
+                            print(f"WARNING: Unknown model type '{type}' for {model.replace("_common_", "/Common/")}, skipping model")
+                            continue
+                    else:
+                        continue
+                    #Get the path to the root folder of the current aes export so we can
+                    #navigate to Common
+                    topdir = os.path.dirname(os.path.dirname(directory))
+                    modelFile = os.path.join(topdir, "Common", model.replace("_common_", ""))
+                    # Store metadata for this model
+                    modelMetadata[modelFile] = {'type': type, 'category': category, 'mtl': mtl}
+
+                    # Add to appropriate list
+                    if category == 'faces':
+                        print(f"adding face: {baseName}")
+                        faceModels.append(modelFile)
+                    elif category == 'gloves':
+                        print(f"adding glove: {baseName}")
+                        gloveModels.append(modelFile)
+                    elif category == 'boots':
+                        print(f"adding boots: {baseName}")
+                        bootsModels.append(modelFile)
+        
         # Look for face_diff.bin
         faceDiffFile = ijoin(directory, "face_diff.bin")
         if faceDiffFile is not None and faceDiffBinFilename is None:
@@ -347,7 +398,7 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
         portraitFile = ijoin(directory, "portrait.dds")
         if portraitFile is not None and portraitFilename is None:
             portraitFilename = portraitFile
-
+    
     # Always create a Faces folder
     # Create Faces/XXX01 - PlayerName/ subfolder
     facesParentFolder = os.path.join(destinationDirectory, "Faces")

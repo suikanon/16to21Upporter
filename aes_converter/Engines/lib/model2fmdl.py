@@ -54,10 +54,8 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
             for (boneIndex, weight) in modelVertex.boneMapping.items():
                 # boneIndex is an integer - get the actual bone object from the mesh's bone group
                 ##With ancient face_high_win32 templates boneIndex can be higher here and the assignment would error out
-                ##Probably caused by the old .model plugin, for now set these meshes to not have bone mapping at all
-                ###TODO: I guess this should be a static (nonexistent) bone instead of whatever happens to be at
-                ###bones[0]. Figure out how to do that once more critical issues are fixed.
-                ###I checked in-game and PES does still respect the z-axis position being way underground, so this works OK for now
+                ##Probably caused by the old .model plugin, for now set these meshes to not have bone mapping at all,
+                ##which causes them to get correctly assigned to a nonexistent bone later down the line
                 if(boneIndex > len(modelMesh.boneGroup.bones) - 1):
                     fmdlVertex.boneMapping = None
                     modelMesh.vertexFields.hasBoneMapping = False
@@ -81,7 +79,7 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
     return (fmdlVertices, fmdlFaces, modelMesh.vertexFields.hasBoneMapping)
 
 
-def convertMesh(modelMesh, modelFmdlBones, materialInstances):
+def convertMesh(modelMesh, fmdlBones, modelFmdlBones, materialInstances, staticBone):
     """
     Convert a single ModelFile mesh to FMDL mesh.
     """
@@ -104,10 +102,33 @@ def convertMesh(modelMesh, modelFmdlBones, materialInstances):
 
     # Set up bone group
     fmdlMesh.boneGroup = FmdlFile.FmdlFile.BoneGroup()
-    if hasattr(modelMesh, 'boneGroup') and modelMesh.boneGroup:
-        fmdlMesh.boneGroup.bones = [
-            modelFmdlBones[modelBone] for modelBone in modelMesh.boneGroup.bones
-        ]
+    #In foxpes, a mesh with no bones at all will stay unmoving wherever it's placed.
+    #To get the intended effect of sliding around, meshes instead need to be fully painted to
+    #a nonexistent bone
+    if not(fmdlMesh.vertexFields.hasBoneMapping):
+        #Create our nonexistent bone called "static" with very default values if needed
+        if not(staticBone):
+            staticBone = FmdlFile.FmdlFile.Bone()
+            staticBone.name = "static"
+            staticBone.children = []
+            matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]
+            staticBone.globalPosition = FmdlFile.FmdlFile.Vector4(0.2, 0.0, 0.0, 1.0)
+            staticBone.localPosition = FmdlFile.FmdlFile.Vector4(0.0, 0.0, 0.0, 0.0)
+            staticBone.matrix = matrix
+            staticBone.parent = None
+            fmdlBones.append(staticBone)
+        #Iterate over the FMDL vertices again to assign them to our static bone
+        for vertex in fmdlMesh.vertices:
+            vertex.boneMapping = {staticBone: 1.0}
+        #Add our bone to the bonegroup
+        fmdlMesh.boneGroup.bones = [staticBone]
+        #And set hasBoneMapping to true since we've now fixed everything
+        fmdlMesh.vertexFields.hasBoneMapping = True
+    else:
+        if hasattr(modelMesh, 'boneGroup') and modelMesh.boneGroup:
+            fmdlMesh.boneGroup.bones = [
+                modelFmdlBones[modelBone] for modelBone in modelMesh.boneGroup.bones
+            ]
 
     # Find matching material instance
     materialName = modelMesh.material if hasattr(modelMesh, 'material') else None
@@ -204,14 +225,18 @@ def convertMesh(modelMesh, modelFmdlBones, materialInstances):
         if shader == 'fox3dfw_constant_srgb_ndr_solid':
             fmdlMesh.extensionHeaders.add('Has-Antiblur-Meshes')
 
-    return fmdlMesh
+    return fmdlMesh, staticBone
 
 
-def convertMeshes(model, modelFmdlBones, materialInstances):
+def convertMeshes(model, fmdlBones, modelFmdlBones, materialInstances):
     """Convert all meshes from ModelFile to FMDL format."""
     fmdlMeshes = []
+    #Boneless prefox player models need to be fully painted to a nonexistent bone.
+    #Keep track of a single copy of such a bone here if it ends up being needed to avoid
+    #adding multiples to an FMDL file with multiple meshes with no weight
+    staticBone = None
     for modelMesh in model.meshes:
-        fmdlMesh = convertMesh(modelMesh, modelFmdlBones, materialInstances)
+        fmdlMesh, staticBone = convertMesh(modelMesh, fmdlBones, modelFmdlBones, materialInstances, staticBone)
         fmdlMeshes.append(fmdlMesh)
 
     return fmdlMeshes
@@ -609,7 +634,7 @@ def convertModel(model, sourceDirectory, modelType=None, modelCategory=None, mtl
     fmdlFile.bones, modelFmdlBones = convertBones(model.bones)
 
     # 3. Meshes
-    fmdlFile.meshes = convertMeshes(model, modelFmdlBones, materialInstances)
+    fmdlFile.meshes = convertMeshes(model, fmdlFile.bones, modelFmdlBones, materialInstances)
 
     # 4. Mesh Groups
     fmdlFile.meshGroups = createMeshGroups(model, fmdlFile.meshes)

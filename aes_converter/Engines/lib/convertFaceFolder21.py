@@ -584,6 +584,9 @@ def convertFaceFolder(sourceDirectories, destinationDirectory, commonDestination
     if faceHighModel is not None:
         textures = getTexturesUsedByModel(faceHighModel)
         faceTexturesNeeded.update(textures)
+    if hairHighModel is not None:
+        textures = getTexturesUsedByModel(hairHighModel)
+        faceTexturesNeeded.update(textures)
 
     # Copy only the textures that are actually used
     for directory in sourceDirectories:

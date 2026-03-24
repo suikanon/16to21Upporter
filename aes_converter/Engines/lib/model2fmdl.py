@@ -14,7 +14,7 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
     """
     fmdlVertices = []
     modelFmdlVertices = {}  # For face conversion
-    
+
     for modelVertex in modelMesh.vertices:
         fmdlVertex = FmdlFile.FmdlFile.Vertex()
 
@@ -34,7 +34,7 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
         if modelMesh.vertexFields.hasTangent:
             fmdlVertex.tangent = FmdlFile.FmdlFile.Vector4(
                 modelVertex.tangent.x,
-                
+
                 modelVertex.tangent.y,
                 modelVertex.tangent.z,
                 1.0
@@ -50,19 +50,33 @@ def convertMeshGeometry(modelMesh, modelFmdlBones):
         # Bone mapping (convert bone references)
         if modelMesh.vertexFields.hasBoneMapping:
             fmdlVertex.boneMapping = {}
-
+            totalWeight = 0
+            hasDskUpperarmLong = False
             for (boneIndex, weight) in modelVertex.boneMapping.items():
+
                 # boneIndex is an integer - get the actual bone object from the mesh's bone group
                 ##With ancient face_high_win32 templates boneIndex can be higher here and the assignment would error out
                 ##Probably caused by the old .model plugin, for now set these meshes to not have bone mapping at all,
                 ##which causes them to get correctly assigned to a nonexistent bone later down the line
-                if(boneIndex > len(modelMesh.boneGroup.bones) - 1):
+                if (boneIndex > len(modelMesh.boneGroup.bones) - 1):
                     fmdlVertex.boneMapping = None
                     modelMesh.vertexFields.hasBoneMapping = False
                 else:
                     modelBone = modelMesh.boneGroup.bones[boneIndex]
                     fmdlBone = modelFmdlBones[modelBone]
+                    if fmdlBone.name in ('dsk_upperarm_long_l', 'dsk_upperarm_long_r'):
+                        hasDskUpperarmLong = True
+                        continue
                     fmdlVertex.boneMapping[fmdlBone] = weight
+                    totalWeight += weight
+            if hasDskUpperarmLong:
+                for (boneIndex, weight) in modelVertex.boneMapping.items():
+                    if (boneIndex <= len(modelMesh.boneGroup.bones) - 1):
+                        modelBone = modelMesh.boneGroup.bones[boneIndex]
+                        fmdlBone = modelFmdlBones[modelBone]
+                        if fmdlBone.name in ('dsk_upperarm_long_l', 'dsk_upperarm_long_r'):
+                            continue
+                        fmdlVertex.boneMapping[fmdlBone] = fmdlVertex.boneMapping[fmdlBone] / totalWeight
 
         fmdlVertices.append(fmdlVertex)
         modelFmdlVertices[modelVertex] = fmdlVertex
@@ -90,24 +104,26 @@ def convertMesh(modelMesh, fmdlBones, modelFmdlBones, materialInstances, staticB
     fmdlMesh.vertexFields.hasNormal = modelMesh.vertexFields.hasNormal
     fmdlMesh.vertexFields.hasTangent = modelMesh.vertexFields.hasTangent
     fmdlMesh.vertexFields.hasBitangent = False
-    fmdlMesh.vertexFields.hasColor = modelMesh.vertexFields.hasColor if hasattr(modelMesh.vertexFields, 'hasColor') else False
+    fmdlMesh.vertexFields.hasColor = modelMesh.vertexFields.hasColor if hasattr(modelMesh.vertexFields,
+                                                                                'hasColor') else False
     fmdlMesh.vertexFields.hasBoneMapping = modelMesh.vertexFields.hasBoneMapping
     fmdlMesh.vertexFields.uvCount = modelMesh.vertexFields.uvCount if hasattr(modelMesh.vertexFields, 'uvCount') else 1
     fmdlMesh.vertexFields.highPrecisionUv = False
 
     # Convert geometry
-    ##Edge cases where ancient template models have bad bone mapping information need 
+    ##Edge cases where ancient template models have bad bone mapping information need
     ##the fmdlMesh.vertexFields.hasBoneMapping assignment here, see convertMeshGeometry above for more info
-    (fmdlMesh.vertices, fmdlMesh.faces, fmdlMesh.vertexFields.hasBoneMapping) = convertMeshGeometry(modelMesh, modelFmdlBones)
+    (fmdlMesh.vertices, fmdlMesh.faces, fmdlMesh.vertexFields.hasBoneMapping) = convertMeshGeometry(modelMesh,
+                                                                                                    modelFmdlBones)
 
     # Set up bone group
     fmdlMesh.boneGroup = FmdlFile.FmdlFile.BoneGroup()
-    #In foxpes, a mesh with no bones at all will stay unmoving wherever it's placed.
-    #To get the intended effect of sliding around, meshes instead need to be fully painted to
-    #a nonexistent bone
-    if not(fmdlMesh.vertexFields.hasBoneMapping):
-        #Create our nonexistent bone called "static" with very default values if needed
-        if not(staticBone):
+    # In foxpes, a mesh with no bones at all will stay unmoving wherever it's placed.
+    # To get the intended effect of sliding around, meshes instead need to be fully painted to
+    # a nonexistent bone
+    if not (fmdlMesh.vertexFields.hasBoneMapping):
+        # Create our nonexistent bone called "static" with very default values if needed
+        if not (staticBone):
             staticBone = FmdlFile.FmdlFile.Bone()
             staticBone.name = "static"
             staticBone.children = []
@@ -117,12 +133,12 @@ def convertMesh(modelMesh, fmdlBones, modelFmdlBones, materialInstances, staticB
             staticBone.matrix = matrix
             staticBone.parent = None
             fmdlBones.append(staticBone)
-        #Iterate over the FMDL vertices again to assign them to our static bone
+        # Iterate over the FMDL vertices again to assign them to our static bone
         for vertex in fmdlMesh.vertices:
             vertex.boneMapping = {staticBone: 1.0}
-        #Add our bone to the bonegroup
+        # Add our bone to the bonegroup
         fmdlMesh.boneGroup.bones = [staticBone]
-        #And set hasBoneMapping to true since we've now fixed everything
+        # And set hasBoneMapping to true since we've now fixed everything
         fmdlMesh.vertexFields.hasBoneMapping = True
     else:
         if hasattr(modelMesh, 'boneGroup') and modelMesh.boneGroup:
@@ -231,9 +247,9 @@ def convertMesh(modelMesh, fmdlBones, modelFmdlBones, materialInstances, staticB
 def convertMeshes(model, fmdlBones, modelFmdlBones, materialInstances):
     """Convert all meshes from ModelFile to FMDL format."""
     fmdlMeshes = []
-    #Boneless prefox player models need to be fully painted to a nonexistent bone.
-    #Keep track of a single copy of such a bone here if it ends up being needed to avoid
-    #adding multiples to an FMDL file with multiple meshes with no weight
+    # Boneless prefox player models need to be fully painted to a nonexistent bone.
+    # Keep track of a single copy of such a bone here if it ends up being needed to avoid
+    # adding multiples to an FMDL file with multiple meshes with no weight
     staticBone = None
     for modelMesh in model.meshes:
         fmdlMesh, staticBone = convertMesh(modelMesh, fmdlBones, modelFmdlBones, materialInstances, staticBone)
@@ -318,19 +334,19 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
                 if filename.lower().endswith('.mtl'):
                     mtlFiles.append(os.path.join(sourceDirectory, filename))
     else:
-        #If the MTL file was in the Common folder we need to set the path correctly
-        if("_common_" in mtl):
+        # If the MTL file was in the Common folder we need to set the path correctly
+        if ("_common_" in mtl):
             rootDirectory = os.path.dirname(sourceDirectory)
             mtlFiles.append(os.path.join(rootDirectory, "Common", mtl))
-        else:    
+        else:
             mtlFiles.append(os.path.join(sourceDirectory, mtl))
 
     # Parse all .mtl files to build a material database
     mtlMaterials = {}  # name -> material XML element
     for mtlFile in mtlFiles:
-        #If the MTL file was in the Common folder we also need to carry that information over
-        #to the material parsing section so the texture path will be set correctly
-        if("_common_" in mtlFile):
+        # If the MTL file was in the Common folder we also need to carry that information over
+        # to the material parsing section so the texture path will be set correctly
+        if ("_common_" in mtlFile):
             mtlFile = mtlFile.replace("_common_", "")
             try:
                 unzlib_file(mtlFile)
@@ -341,7 +357,7 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
                 for materialElement in root.findall('material'):
                     materialName = materialElement.get('name')
                     if materialName:
-                        #The True means this material is from a Common folder MTL
+                        # The True means this material is from a Common folder MTL
                         mtlMaterials[materialName] = [materialElement, True]
             except Exception as e:
                 print(f"WARNING: Failed to parse .mtl file {mtlFile}: {e}")
@@ -355,7 +371,7 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
                 for materialElement in root.findall('material'):
                     materialName = materialElement.get('name')
                     if materialName:
-                        #The True means this material is not from a Common folder MTL
+                        # The True means this material is not from a Common folder MTL
                         mtlMaterials[materialName] = [materialElement, False]
             except Exception as e:
                 print(f"WARNING: Failed to parse .mtl file {mtlFile}: {e}")
@@ -371,13 +387,13 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
             materialElement = mtlMaterials[materialName][0]
             shader = materialElement.get('shader', '')
 
-            #Outlines on foxpes should be deferred for filesize optimisation reasons.
-            #If someone prefers a forward outline and the added filesize that comes from it
-            #instead they can make those changes manually.
+            # Outlines on foxpes should be deferred for filesize optimisation reasons.
+            # If someone prefers a forward outline and the added filesize that comes from it
+            # instead they can make those changes manually.
             ##A deferred outline also acts as an effective antiblur mesh, so the mesh it's
             ##outlining doesn't need antiblur toggled on. Handling this is much more
             ##involved so it's TODO for now
-            if('outline' in materialName):
+            if ('outline' in materialName):
                 materialInstance.technique = 'fox3DDF_Blin'
                 materialInstance.shader = 'fox3ddf_blin'
             else:
@@ -428,7 +444,7 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
                     texture.filename = 'u0123p0.ftex'
                 # Check if texture path references Common folder or the MTL the material came from
                 # was from the Common folder
-                elif(texturePath.startswith('model/character/uniform/common') or mtlMaterials[materialName][1]):
+                elif (texturePath.startswith('model/character/uniform/common') or mtlMaterials[materialName][1]):
                     # Common folder texture
                     texture.directory = '/Assets/pes16/model/character/common/000/sourceimages/'
                     texture.filename = os.path.basename(texturePath)
@@ -456,13 +472,13 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
 
                 # Add texture to materialInstance with 'Base_Tex_SRGB' key
                 materialInstance.textures = [('Base_Tex_SRGB', texture)]
-                #If we're using blin we also need normal and specular maps. Set them to
-                #the neutral defaults.
+                # If we're using blin we also need normal and specular maps. Set them to
+                # the neutral defaults.
                 ##TODO: some models will have their own normal and specular maps. Add
                 ##support for using those instead. Keep in mind this is not as straightforward
                 ##as just grabbing the textures for Normal and Specular in the mtl, at least
                 ##for normal maps the texture channel order is different
-                if(materialInstance.technique == 'fox3DDF_Blin'):
+                if (materialInstance.technique == 'fox3DDF_Blin'):
                     nrmTex = FmdlFile.FmdlFile.Texture()
                     nrmTex.filename = "dummy_nrm.dds"
                     nrmTex.directory = '/Assets/pes16/model/character/common/sourceimages/'
@@ -483,8 +499,8 @@ def convertMaterials(model, sourceDirectory, modelType=None, modelCategory=None,
             materialInstance.mtl_twosided = False
             materialInstance.mtl_alphablend = False
 
-        #Blin should also have a MatParamIndex_0
-        if(materialInstance.technique == 'fox3DDF_Blin'):
+        # Blin should also have a MatParamIndex_0
+        if (materialInstance.technique == 'fox3DDF_Blin'):
             materialInstance.parameters = [('MatParamIndex_0', (0.0, 0.0, 0.0, 0.0))]
         else:
             materialInstance.parameters = []
@@ -757,10 +773,12 @@ def combineBootsModels(modelFiles, sourceDirectory, modelMetadata=None):
             # Update vertex bone mappings
             if mesh.vertexFields.hasBoneMapping:
                 for vertex in mesh.vertices:
+                    totalWeight = 0.0
                     if hasattr(vertex, 'boneMapping') and vertex.boneMapping:
                         newBoneMapping = {}
                         for bone, weight in vertex.boneMapping.items():
                             newBoneMapping[boneMapping[bone]] = weight
+                            totalWeight += weight
                         vertex.boneMapping = newBoneMapping
 
             mergedFmdl.meshes.append(mesh)
